@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Employee Portal</title>
+    <!-- Tailwind CSS and DaisyUI CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <style>
+        .sidebar-transition {
+            transition: width 0.3s ease, transform 0.3s ease;
+        }
+        /* Custom scrollbar styling */
+        .scrollable-table {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 0.5rem;
+        }
+        .scrollable-table::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scrollable-table::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .scrollable-table::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .scrollable-table::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-base-200 min-h-screen">
+    <!-- Navbar with sample branding (similar to login page) -->
+    <div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-30">
+        <div class="flex-1">
+            <button id="menuBtn" class="btn btn-ghost btn-circle mr-2">
+                <i class="fas fa-bars text-xl"></i>
+            </button>
+            <a class="btn btn-ghost text-xl">daisyUI</a>
+        </div>
+        <div class="flex-none gap-2">
+            <span class="text-sm text-base-content/70 hidden sm:inline">Admin Dashboard</span>
+            <div class="dropdown dropdown-end">
+                <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
+                    <div class="w-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
+                        <span class="font-semibold">AD</span>
+                    </div>
+                </div>
+                <ul tabindex="0" class="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-100 rounded-box w-52">
+                    <li><a class="text-sm">Profile</a></li>
+                    <li><a class="text-sm">Settings</a></li>
+                    <li><a class="text-sm text-error">Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content with sidebar -->
+    <div class="flex relative">
+        <!-- Overlay for mobile when sidebar is open -->
+        <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeSidebar()"></div>
+
+        <!-- Sidebar - Hidden by default, expands when clicked -->
+        <div id="sidebar" class="fixed left-0 top-0 h-full w-72 bg-base-100 shadow-2xl z-50 sidebar-transition -translate-x-full lg:translate-x-0 lg:relative lg:top-auto lg:h-[calc(100vh-64px)] lg:z-40">
+            <!-- Close button for mobile -->
+            <button onclick="closeSidebar()" class="btn btn-ghost btn-circle absolute right-2 top-2 lg:hidden">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="p-6 border-b border-base-200">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
+                        <i class="fas fa-qrcode text-primary-content text-xl"></i>
+                    </div>
+                    <div>
+                        <span class="text-lg font-bold text-base-content">QR Admin</span>
+                        <p class="text-xs text-base-content/50 mt-0.5">Management Portal</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sidebar Menu -->
+            <div class="p-4 overflow-y-auto h-[calc(100%-180px)]">
+                <div class="mb-6">
+                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">Main</p>
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary text-primary-content font-medium">
+                                <i class="fas fa-users w-5"></i>
+                                <span>Users</span>
+                                <span id="sidebarUserCount" class="ml-auto bg-primary-content/20 text-primary-content text-xs px-2 py-1 rounded-full">0</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-user-shield w-5"></i>
+                                <span>Admins</span>
+                                <span id="sidebarAdminCount" class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">0</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-boxes w-5"></i>
+                                <span>Master Items</span>
+                                <span class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">1.2k</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="mb-6">
+                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">QR Operations</p>
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-qrcode w-5"></i>
+                                <span>Generate QR</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-camera w-5"></i>
+                                <span>Verify QR</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-history w-5"></i>
+                                <span>Logs</span>
+                                <span class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">New</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="mb-6">
+                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">System</p>
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-cog w-5"></i>
+                                <span>Settings</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-error hover:bg-error/10 transition-all duration-200">
+                                <i class="fas fa-sign-out-alt w-5"></i>
+                                <span>Logout</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- User Profile at Bottom -->
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-base-200 bg-base-100">
+                <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
+                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-content font-semibold shadow-sm">
+                        <span>AD</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-base-content truncate">Admin User</p>
+                        <p class="text-xs text-base-content/50 truncate">admin@example.com</p>
+                    </div>
+                    <div class="dropdown dropdown-end">
+                        <div tabindex="0" role="button" class="btn btn-ghost btn-xs btn-circle">
+                            <i class="fas fa-chevron-down text-base-content/50"></i>
+                        </div>
+                        <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box shadow-lg p-2 w-52 z-[1]">
+                            <li><a class="text-sm">Profile</a></li>
+                            <li><a class="text-sm">Account Settings</a></li>
+                            <li class="divider my-1"></li>
+                            <li><a class="text-sm text-error">Logout</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="mainContent" class="flex-1 p-6 md:p-8 w-full lg:w-auto">
+            <!-- Header with Create User Button -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-base-content">Worker Management</h1>
+                    <p class="text-base-content/70 mt-1">View all registered workers</p>
+                </div>
+                <button onclick="openUserModal()" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i>
+                    Create New Worker
+                </button>
+            </div>
+
+            <!-- Workers List - Shows only First Name, Last Name, and Role -->
+            <div class="card bg-base-100 shadow-xl">
+                <div class="card-body">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">All Workers</h2>
+                        <button id="refreshButton" class="btn btn-sm btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                    
+                    <div class="scrollable-table">
+                        <table class="table w-full">
+                            <thead>
+                                <tr>
+                                    <th class="sticky top-0 bg-base-200">First Name</th>
+                                    <th class="sticky top-0 bg-base-200">Last Name</th>
+                                    <th class="sticky top-0 bg-base-200">Role</th>
+                                </tr>
+                            </thead>
+                            <tbody id="workersTableBody">
+                                <!-- Workers will be inserted here -->
+                                <tr>
+                                    <td colspan="3" class="text-center py-8 text-base-content/50">
+                                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                        <p>Loading workers...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div id="workersCount" class="text-right mt-2 text-sm text-base-content/50"></div>
+                    <div id="workersStatus" class="text-center font-bold text-lg mt-4"></div>
+                </div>
+            </div>
+            
+            <!-- Worker Stats Summary -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-base-content/70 text-sm font-medium">Total Workers</p>
+                                <p id="totalWorkers" class="text-3xl font-bold text-base-content mt-1">0</p>
+                            </div>
+                            <div class="bg-primary/10 p-4 rounded-2xl">
+                                <i class="fas fa-users text-2xl text-primary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-base-content/70 text-sm font-medium">Admins</p>
+                                <p id="adminCount" class="text-3xl font-bold text-base-content mt-1">0</p>
+                            </div>
+                            <div class="bg-secondary/10 p-4 rounded-2xl">
+                                <i class="fas fa-user-shield text-2xl text-secondary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card bg-base-100 shadow-xl">
+                    <div class="card-body p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-base-content/70 text-sm font-medium">Users</p>
+                                <p id="userCount" class="text-3xl font-bold text-base-content mt-1">0</p>
+                            </div>
+                            <div class="bg-success/10 p-4 rounded-2xl">
+                                <i class="fas fa-user text-2xl text-success"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Worker Modal -->
+    <dialog id="userModal" class="modal">
+        <div class="modal-box">
+            <h3 class="font-bold text-lg mb-4">Create New Worker</h3>
+            <form method="dialog" id="workerForm">
+                <div class="space-y-4">
+                    <div>
+                        <label class="label" for="first_name">
+                            <span class="label-text">First Name</span>
+                        </label>
+                        <input type="text" id="first_name" placeholder="Enter first name" class="input input-bordered w-full" required />
+                    </div>
+                    <div>
+                        <label class="label" for="last_name">
+                            <span class="label-text">Last Name</span>
+                        </label>
+                        <input type="text" id="last_name" placeholder="Enter last name" class="input input-bordered w-full" required />
+                    </div>
+                    <div>
+                        <label class="label" for="employee_id">
+                            <span class="label-text">Employee ID</span>
+                        </label>
+                        <input type="text" id="employee_id" placeholder="Enter employee ID" class="input input-bordered w-full" required />
+                    </div>
+                    <div>
+                        <label class="label" for="username">
+                            <span class="label-text">Username</span>
+                        </label>
+                        <input type="text" id="username" placeholder="Enter username" class="input input-bordered w-full" required />
+                    </div>
+                    <div>
+                        <label class="label" for="role">
+                            <span class="label-text">Role</span>
+                        </label>
+                        <select id="role" class="select select-bordered w-full" required>
+                            <option value="">Select Role</option>
+                            <option value="Admin">Admin</option>
+                            <option value="User">User</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-action">
+                    <button type="submit" class="btn btn-primary">Create Worker</button>
+                    <button type="button" class="btn" onclick="closeUserModal()">Cancel</button>
+                </div>
+            </form>
+            <div id="modalStatus" class="text-center font-bold text-sm mt-2"></div>
+        </div>
+    </dialog>
+
+    <script>
+        // Function to get role badge color (only Admin and User)
+        function getRoleBadgeColor(role) {
+            switch(role?.toLowerCase()) {
+                case 'admin':
+                    return 'badge-secondary';
+                case 'user':
+                    return 'badge-success';
+                default:
+                    return 'badge-ghost';
+            }
+        }
+
+        // Function to fetch all workers from API
+        async function fetchAllWorkers() {
+            const tableBody = document.getElementById("workersTableBody");
+            const workersStatus = document.getElementById("workersStatus");
+            const workersCount = document.getElementById("workersCount");
+            const totalWorkers = document.getElementById("totalWorkers");
+            const adminCount = document.getElementById("adminCount");
+            const userCount = document.getElementById("userCount");
+            const sidebarUserCount = document.getElementById("sidebarUserCount");
+            const sidebarAdminCount = document.getElementById("sidebarAdminCount");
+
+            try {
+                tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Loading workers...</p></td></tr>';
+                
+                // Try multiple possible endpoints
+                const endpoints = [
+                    '/workers/',
+                    '/api/workers/',
+                    'http://localhost:8000/workers/',
+                    'http://127.0.0.1:8000/workers/'
+                ];
+                
+                let response = null;
+                let data = null;
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const res = await fetch(endpoint);
+                        if (res.ok) {
+                            response = res;
+                            data = await res.json();
+                            break;
+                        }
+                    } catch (e) {
+                        console.log(`Endpoint ${endpoint} failed, trying next...`);
+                        continue;
+                    }
+                }
+                
+                if (!response || !data) {
+                    throw new Error('Could not connect to any endpoint');
+                }
+
+                if (data.workers && data.workers.length > 0) {
+                    tableBody.innerHTML = '';
+                    
+                    // Counters
+                    let adminTotal = 0;
+                    let userTotal = 0;
+                    
+                    data.workers.forEach(worker => {
+                        const row = document.createElement('tr');
+                        row.className = 'hover:bg-base-200/50 transition-all duration-200';
+                        
+                        // Count roles
+                        if (worker.role?.toLowerCase() === 'admin') {
+                            adminTotal++;
+                        } else if (worker.role?.toLowerCase() === 'user') {
+                            userTotal++;
+                        }
+                        
+                        row.innerHTML = `
+                            <td class="font-medium">${worker.first_name || ''}</td>
+                            <td class="font-medium">${worker.last_name || ''}</td>
+                            <td>
+                                <span class="badge badge-soft ${getRoleBadgeColor(worker.role)}">
+                                    ${worker.role || 'User'}
+                                </span>
+                            </td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                    
+                    // Update counts
+                    const total = data.count || data.workers.length;
+                    workersCount.textContent = `Total: ${total} workers`;
+                    totalWorkers.textContent = total;
+                    adminCount.textContent = adminTotal;
+                    userCount.textContent = userTotal;
+                    
+                    // Update sidebar counts
+                    sidebarUserCount.textContent = userTotal;
+                    sidebarAdminCount.textContent = adminTotal;
+                    
+                    workersStatus.textContent = "";
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-users text-4xl mb-2 opacity-30"></i><p>No workers found</p></td></tr>';
+                    workersCount.textContent = "";
+                    totalWorkers.textContent = "0";
+                    adminCount.textContent = "0";
+                    userCount.textContent = "0";
+                    sidebarUserCount.textContent = "0";
+                    sidebarAdminCount.textContent = "0";
+                }
+                
+            } catch (error) {
+                console.error("Error fetching workers:", error);
+                tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-error"><i class="fas fa-exclamation-circle text-2xl mb-2"></i><p>Error loading workers</p></td></tr>';
+                workersStatus.textContent = "Error: " + error.message;
+                workersStatus.className = "text-center font-bold text-lg mt-4 text-error";
+                workersCount.textContent = "";
+            }
+        }
+
+        // Worker creation form
+        document.getElementById("workerForm")?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const data = {
+                first_name: document.getElementById("first_name").value,
+                last_name: document.getElementById("last_name").value,
+                employee_id: document.getElementById("employee_id").value,
+                username: document.getElementById("username").value,
+                role: document.getElementById("role").value,
+            };
+
+            const modalStatus = document.getElementById("modalStatus");
+            
+            try {
+                // Try multiple endpoints for POST
+                const endpoints = [
+                    '/api/worker',
+                    '/worker',
+                    'http://localhost:8000/api/worker',
+                    'http://127.0.0.1:8000/api/worker'
+                ];
+                
+                let success = false;
+                
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await fetch(endpoint, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify(data),
+                        });
+                        
+                        if (response.ok || response.status === 201 || response.status === 409) {
+                            const result = await response.json();
+                            
+                            if (response.status === 201) {
+                                modalStatus.textContent = result.message || "Worker created successfully!";
+                                modalStatus.className = "text-center font-bold text-sm mt-2 text-success";
+                                success = true;
+                            } else if (response.status === 409) {
+                                modalStatus.textContent = "Worker already exists";
+                                modalStatus.className = "text-center font-bold text-sm mt-2 text-warning";
+                                success = true;
+                            }
+                            
+                            if (success) {
+                                // Refresh the list
+                                fetchAllWorkers();
+                                
+                                // Reset form and close modal after delay
+                                setTimeout(() => {
+                                    document.getElementById("workerForm").reset();
+                                    modalStatus.textContent = "";
+                                    closeUserModal();
+                                }, 1000);
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        console.log(`POST failed for ${endpoint}:`, e);
+                        continue;
+                    }
+                }
+                
+                if (!success) {
+                    modalStatus.textContent = "Failed to create worker. Please try again.";
+                    modalStatus.className = "text-center font-bold text-sm mt-2 text-error";
+                }
+                
+            } catch (error) {
+                console.error("Error creating worker:", error);
+                modalStatus.textContent = "Error creating worker";
+                modalStatus.className = "text-center font-bold text-sm mt-2 text-error";
+            }
+        });
+
+        // Refresh button click handler
+        document.getElementById("refreshButton").addEventListener("click", fetchAllWorkers);
+
+        // Load workers when page loads
+        document.addEventListener('DOMContentLoaded', fetchAllWorkers);
+
+        // Sidebar toggle function
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            
+            if (window.innerWidth < 1024) {
+                if (sidebar.classList.contains('-translate-x-full')) {
+                    sidebar.classList.remove('-translate-x-full');
+                    overlay.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    overlay.classList.add('hidden');
+                }
+            }
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            
+            if (window.innerWidth < 1024) {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            }
+        }
+
+        // Menu button click handler
+        document.getElementById('menuBtn').addEventListener('click', toggleSidebar);
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('overlay');
+            
+            if (window.innerWidth >= 1024) {
+                sidebar.classList.remove('-translate-x-full');
+                overlay.classList.add('hidden');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                overlay.classList.add('hidden');
+            }
+        });
+
+        // Modal Functions
+        function openUserModal() {
+            document.getElementById('userModal').showModal();
+        }
+
+        function closeUserModal() {
+            document.getElementById('userModal').close();
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('userModal');
+            if (event.target === modal) {
+                modal.close();
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Worker Form</title>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    /* Custom scrollbar styling */
+    .scrollable-table {
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    .scrollable-table::-webkit-scrollbar {
+      width: 8px;
+    }
+    .scrollable-table::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    .scrollable-table::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    .scrollable-table::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    /* Dropdown styling */
+    .dropdown-container {
+      display: flex;
+      flex-direction: column;
+    }
+    .dropdown-toggle {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      width: 100%;
+      color: white;
+    }
+    .dropdown-toggle:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    .dropdown-menu {
+      display: none;
+      width: 100%;
+      padding-left: 1.5rem;
+    }
+    .dropdown.active .dropdown-menu {
+      display: block;
+    }
+    .dropdown-item a {
+      display: block;
+      padding: 0.5rem 1rem;
+      color: white;
+    }
+    .dropdown-item a:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+    .dropdown-toggle svg {
+      transition: transform 0.2s ease;
+    }
+    .dropdown.active .dropdown-toggle svg {
+      transform: rotate(180deg);
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="drawer">
+    <input id="my-drawer" type="checkbox" class="drawer-toggle" />
+    <div class="drawer-content flex flex-col">
+      <!-- Navbar -->
+      <div class="navbar bg-blue-400 shadow-sm mb-4">
+        <div class="flex-none">
+          <label for="my-drawer" class="btn btn-square btn-ghost drawer-button">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current"> 
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path> 
+            </svg>
+          </label>
+        </div>
+        <div class="flex-1">
+          <a class="font-semibold text-xl">Workers Tab</a>
+        </div>
+      </div>
+
+      <!-- Main content -->
+      <div class="p-5 flex-grow">
+        <div class="flex flex-col lg:flex-row gap-8">
+          <!-- Worker Creation Form (Left Side) -->
+          <div class="flex-1">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">Create Worker</h1>
+            
+            <div class="card bg-base-100 shadow-xl">
+              <div class="card-body">
+                <form id="workerForm">
+                  <div class="form-control">
+                    <label class="label" for="first_name">
+                      <span class="label-text font-bold">First Name</span>
+                    </label>
+                    <input type="text" id="first_name" name="first_name" class="input input-bordered w-full" required>
+                  </div>
+                  
+                  <div class="form-control">
+                    <label class="label" for="last_name">
+                      <span class="label-text font-bold">Last Name</span>
+                    </label>
+                    <input type="text" id="last_name" name="last_name" class="input input-bordered w-full" required>
+                  </div>
+                  
+                  <div class="form-control">
+                    <label class="label" for="employee_id">
+                      <span class="label-text font-bold">Employee ID</span>
+                    </label>
+                    <input type="text" id="employee_id" name="employee_id" class="input input-bordered w-full" required>
+                  </div>
+                  
+                  <div class="form-control">
+                    <label class="label" for="username">
+                      <span class="label-text font-bold">Username</span>
+                    </label>
+                    <input type="text" id="username" name="username" class="input input-bordered w-full" required>
+                  </div>
+                  
+                  <div class="form-control mt-6">
+                    <button type="submit" class="btn btn-success text-white">Submit</button>
+                  </div>
+                </form>
+                
+                <div id="statusMessage" class="text-center font-bold text-lg mt-4"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Worker List Display (Right Side) -->
+          <div class="flex-1">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-8">Registered Workers</h1>
+            
+            <div class="card bg-base-100 shadow-xl">
+              <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                  <h2 class="text-xl font-semibold">All Workers</h2>
+                  <button id="refreshButton" class="btn btn-sm btn-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+                
+                <div class="scrollable-table">
+                  <table class="table w-full">
+                    <thead>
+                      <tr>
+                        <th class="sticky top-0 bg-base-200">First Name</th>
+                        <th class="sticky top-0 bg-base-200">Last Name</th>
+                        <th class="sticky top-0 bg-base-200">Employee ID</th>
+                        <th class="sticky top-0 bg-base-200">Username</th>
+                      </tr>
+                    </thead>
+                    <tbody id="workersTableBody">
+                      <!-- Workers will be inserted here -->
+                      <tr>
+                        <td colspan="4" class="text-center py-4">Loading workers...</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div id="workersCount" class="text-right mt-2 text-sm text-gray-500"></div>
+                <div id="workersStatus" class="text-center font-bold text-lg mt-4"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="drawer-side">
+      <label for="my-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
+      <ul class="menu bg-blue-400 text-white min-h-full w-80 p-4">
+        <!-- Lot Dropdown -->
+        <li class="mb-1">
+          <div class="dropdown-container">
+            <button class="dropdown-toggle" onclick="toggleDropdown(event, 'lot-dropdown')">
+              <div class="flex justify-between items-center">
+                <span>Lot</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+            </button>
+            <ul id="lot-dropdown" class="dropdown-menu">
+              <li class="dropdown-item"><a href="/output/register">Lot Registration</a></li>
+            </ul>
+          </div>
+        </li>
+        
+        <!-- Product Dropdown -->
+        <li class="mb-1">
+          <div class="dropdown-container">
+            <button class="dropdown-toggle" onclick="toggleDropdown(event, 'product-dropdown')">
+              <div class="flex justify-between items-center">
+                <span>Product</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+            </button>
+            <ul id="product-dropdown" class="dropdown-menu">
+              <li class="dropdown-item"><a href="/product/create">Product Creation</a></li>
+              <li class="dropdown-item"><a href="/product/update">Product Update</a></li>
+            </ul>
+          </div>
+        </li>
+        
+        <!-- Worker Dropdown -->
+        <li class="mb-1">
+          <div class="dropdown-container">
+            <button class="dropdown-toggle" onclick="toggleDropdown(event, 'worker-dropdown')">
+              <div class="flex justify-between items-center">
+                <span>Worker</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                </svg>
+              </div>
+            </button>
+            <ul id="worker-dropdown" class="dropdown-menu">
+              <li class="dropdown-item"><a href="/worker/create">Register Worker</a></li>
+            </ul>
+          </div>
+        </li>
+        
+        <!-- Options Link -->
+        <li class="mb-1"><a href="#" class="block p-2 hover:bg-blue-500 rounded">Options</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // Worker creation form
+    document.getElementById("workerForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const data = {
+        first_name: document.getElementById("first_name").value,
+        last_name: document.getElementById("last_name").value,
+        employee_id: document.getElementById("employee_id").value,
+        username: document.getElementById("username").value,
+      };
+
+      try {
+        const response = await fetch('/api/worker', {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(data),
+        });
+
+        const result = await response.json();
+        const statusMessage = document.getElementById("statusMessage");
+        
+        if (response.status === 409) {
+          statusMessage.textContent = "Worker already exists";
+          statusMessage.className = "text-center font-bold text-lg mt-4 text-warning";
+        } else if (response.status === 201) {
+          statusMessage.textContent = result.message || "Worker created successfully!";
+          statusMessage.className = "text-center font-bold text-lg mt-4 text-success";
+          document.getElementById("workerForm").reset();
+          fetchAllWorkers();
+        } else {
+          statusMessage.textContent = result.message || "Unexpected error occurred.";
+          statusMessage.className = "text-center font-bold text-lg mt-4 text-error";
+        }
+      } catch (error) {
+        console.error("Error creating worker:", error);
+        const statusMessage = document.getElementById("statusMessage");
+        statusMessage.textContent = "Error creating worker: " + error.message;
+        statusMessage.className = "text-center font-bold text-lg mt-4 text-error";
+      }
+    });
+
+    // Function to fetch all workers
+    async function fetchAllWorkers() {
+      const tableBody = document.getElementById("workersTableBody");
+      const workersStatus = document.getElementById("workersStatus");
+      const workersCount = document.getElementById("workersCount");
+
+      try {
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">Loading workers...</td></tr>';
+        
+        const response = await fetch('/api/workers/');
+        const result = await response.json();
+
+        if (response.status === 200) {
+          if (result.workers && result.workers.length > 0) {
+            tableBody.innerHTML = '';
+            result.workers.forEach(worker => {
+              const row = document.createElement('tr');
+              row.innerHTML = `
+                <td>${worker.first_name}</td>
+                <td>${worker.last_name}</td>
+                <td>${worker.employee_id}</td>
+                <td>${worker.username}</td>
+              `;
+              tableBody.appendChild(row);
+            });
+            workersCount.textContent = `Total: ${result.count} workers`;
+            workersStatus.textContent = "";
+          } else {
+            tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4">No workers found</td></tr>';
+            workersCount.textContent = "";
+          }
+        } else {
+          throw new Error(result.error || "Failed to fetch workers");
+        }
+      } catch (error) {
+        console.error("Error fetching workers:", error);
+        tableBody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-error">Error loading workers</td></tr>';
+        workersStatus.textContent = "Error: " + error.message;
+        workersStatus.className = "text-center font-bold text-lg mt-4 text-error";
+        workersCount.textContent = "";
+      }
+    }
+
+    // Refresh button click handler
+    document.getElementById("refreshButton").addEventListener("click", fetchAllWorkers);
+
+    // Load workers when page loads
+    document.addEventListener('DOMContentLoaded', fetchAllWorkers);
+
+    // Dropdown functionality
+    function toggleDropdown(event, id) {
+      event.stopPropagation();
+      const dropdownMenu = document.getElementById(id);
+      const dropdownContainer = dropdownMenu.parentElement;
+      
+      // Close all other dropdowns
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        if (menu.id !== id) {
+          menu.style.display = 'none';
+        }
+      });
+      
+      // Toggle current dropdown
+      if (dropdownMenu.style.display === 'block') {
+        dropdownMenu.style.display = 'none';
+      } else {
+        dropdownMenu.style.display = 'block';
+      }
+    }
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function() {
+      document.querySelectorAll('.dropdown-menu').forEach(menu => {
+        menu.style.display = 'none';
+      });
+    });
+  </script>
+</body>
+</html>

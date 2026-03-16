@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Worker Output Submission</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        input[type="number"], input[type="text"] {
+            width: 100px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .data {
+            margin-top: 20px;
+        }
+        .process-item {
+            margin-bottom: 20px;
+        }
+        .notification {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            margin-top: 20px;
+            display: none; /* Hide notification by default */
+        }
+        .error {
+            background-color: red;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Worker Output Submission</h1>
+
+    <!-- Lot Number Input and Fetch Data Button -->
+    <label for="lotNoInput">Enter Lot Number:</label>
+    <input type="number" id="lotNoInput" placeholder="Enter lot number">
+    <button id="fetchDataBtn">Fetch Data</button>
+
+    <div class="data" id="dataContainer">
+        <h2>Worker Data:</h2>
+        <div id="workerData"></div>
+
+        <h2>Product Data:</h2>
+        <div id="productData"></div>
+    </div>
+
+    <!-- Process Section -->
+    <div id="processContainer"></div>
+
+    <!-- Notification Section -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        const fetchDataBtn = document.getElementById('fetchDataBtn');
+        const workerDataElement = document.getElementById('workerData');
+        const productDataElement = document.getElementById('productData');
+        const processContainer = document.getElementById('processContainer');
+        const notificationElement = document.getElementById('notification');
+        const lotNoInput = document.getElementById('lotNoInput');
+
+        let employeeid = "2025-584";  // This is static for now
+        let itemcode = "";  // Will be set dynamically
+        let lotno = null;  // Set by user input
+        let current_status = "ongoing";
+        let processes = [];
+        let currentProcessIndex = 0;
+        let lotQuantity = 0;  // This will store the lot quantity fetched from the database
+
+        let startTime = null;  // Variable to store start time
+        let endTime = null;    // Variable to store end time
+
+        // Fetch Lot Number Data to Get Item Code and Lot Quantity
+        async function fetchLotData(lotno) {
+            try {
+                const response = await fetch(`/api/output/${lotno}`);
+                const lotData = await response.json();
+                if (response.ok && lotData.output_data[0].item_no) {
+                    itemcode = lotData.output_data[0].item_no;  // Set itemcode dynamically
+                    lotQuantity = lotData.output_data[0].lot_quantity;  // Get lot quantity from the database
+                    console.log(`Fetched Lot Data: item_code = ${itemcode}, lot_quantity = ${lotQuantity}`);
+                    return itemcode;
+                } else {
+                    console.log("Invalid lot data received.");
+                    return null;
+                }
+            } catch (error) {
+                console.error("Error fetching lot data:", error);
+                return null;
+            }
+        }
+
+        // Fetch Worker Data
+        async function fetchWorkerData(employeeid) {
+            try {
+                const response = await fetch(`/api/worker/${employeeid}`);
+                const workerData = await response.json();
+                if (response.ok) {
+                    displayWorkerData(workerData);
+                } else {
+                    console.log("Failed to fetch worker data.");
+                }
+            } catch (error) {
+                console.error("Error fetching worker data:", error);
+            }
+        }
+
+        // Fetch Product Data Based on Item Code
+        async function fetchProductData(itemcode) {
+            try {
+                const response = await fetch(`/api/item/${itemcode}`);
+                const productData = await response.json();
+                if (response.ok) {
+                    displayProductData(productData);
+                    console.log("Fetched product data:", productData);
+                    return productData;
+                } else {
+                    console.log("Failed to fetch product data.");
+                }
+            } catch (error) {
+                console.error("Error fetching product data:", error);
+            }
+        }
+
+        // Display Worker Data
+        function displayWorkerData(workerData) {
+            const { employee_id, first_name, last_name, username } = workerData;
+            workerDataElement.innerHTML = `
+                <p><strong>Employee ID:</strong> ${employee_id}</p>
+                <p><strong>First Name:</strong> ${first_name}</p>
+                <p><strong>Last Name:</strong> ${last_name}</p>
+                <p><strong>Username:</strong> ${username}</p>
+            `;
+            console.log("Displayed Worker Data:", workerData);
+        }
+
+        // Display Product Data
+        function displayProductData(productData) {
+            const { item_code, part_no, customer, product_family, process } = productData;
+            productDataElement.innerHTML = `
+                <p><strong>Item Code:</strong> ${item_code}</p>
+                <p><strong>Part No:</strong> ${part_no}</p>
+                <p><strong>Customer:</strong> ${customer}</p>
+                <p><strong>Product Family:</strong> ${product_family}</p>
+            `;
+            processes = process;
+            displayNextProcess();
+        }
+
+        // Display the Next Process
+        function displayNextProcess() {
+            console.log("Current Process Index:", currentProcessIndex);
+            if (currentProcessIndex < processes.length) {
+                const process = processes[currentProcessIndex];
+                const processCode = Object.keys(process)[0];
+                const processName = Object.values(process)[0];
+
+                // Check if the current process has already been updated
+                const processAlreadyUpdated = checkIfProcessAlreadyUpdated(processCode);
+                console.log(`Checking process "${processName}" already updated: ${processAlreadyUpdated}`);
+
+                if (processAlreadyUpdated) {
+                    showNotification(`Process "${processName}" is already completed! Moving to next process.`, "success");
+                    currentProcessIndex++;  // Skip to next process
+                    displayNextProcess();    // Recursively call to display the next process
+                } else {
+                    displayProcess(processCode, processName);
+                }
+            } else {
+                showNotification("Lot is complete! All processes are finished.", "success");
+                console.log("All processes completed.");
+            }
+        }
+
+        // Check if the process has already been updated
+        function checkIfProcessAlreadyUpdated(processCode) {
+            // Fetch the data from worker-output API for the specific process
+            const processData = processes[currentProcessIndex]; // Get process data at the current index
+
+            // Check if the process has been updated already (i.e., has a good_quantity, defect_quantity, and time fields)
+            return processData[processCode]?.good_quantity !== undefined &&
+                   processData[processCode]?.defect_quantity !== undefined &&
+                   processData[processCode]?.time_start !== undefined &&
+                   processData[processCode]?.time_end !== undefined;
+        }
+
+        // Display Process Input Fields
+        function displayProcess(processCode, processName) {
+            // Record the start time when the process is displayed
+            startTime = new Date().toISOString();
+            console.log(`Displaying process "${processName}" with start time: ${startTime}`);
+
+            processContainer.innerHTML = `
+                <div class="process-item">
+                    <h3>Process: ${processName}</h3>
+                    <p><strong>Lot Quantity:</strong> ${lotQuantity}</p>
+        
+                    <label for="goodQuantity">Good Quantity:</label>
+                    <input type="number" id="goodQuantity" placeholder="Good Quantity"><br>
+        
+                    <label for="defectQuantity">Defect Quantity:</label>
+                    <input type="number" id="defectQuantity" placeholder="Defect Quantity"><br>
+        
+                    <button onclick="submitWorkerOutput('${processCode}', '${processName}')">Submit Process</button>
+                </div>
+            `;
+        }
+
+        // Show Notification
+        function showNotification(message, type) {
+            notificationElement.style.display = "block";
+            notificationElement.textContent = message;
+            notificationElement.style.backgroundColor = type === "error" ? "red" : "#4CAF50";
+            console.log(`Notification: ${message} [${type}]`);
+        }
+
+        // Submit Worker Output
+        async function submitWorkerOutput(processCode, processName) {
+            const goodQuantity = parseInt(document.getElementById('goodQuantity').value) || 0;
+            const defectQuantity = parseInt(document.getElementById('defectQuantity').value) || 0;
+            const totalQuantity = goodQuantity + defectQuantity;
+
+            // Record the end time when the submit button is clicked
+            const endTime = new Date().toISOString();
+            console.log(`Submitting output for process "${processName}". Good: ${goodQuantity}, Defect: ${defectQuantity}, Total: ${totalQuantity}`);
+
+            // Validate if Good Quantity + Defect Quantity equals Lot Quantity
+            if (totalQuantity !== lotQuantity) {
+                showNotification("Quantity is not equal to the number of lot quantity.", "error");
+                console.log(`Validation failed. Total quantity ${totalQuantity} does not match lot quantity ${lotQuantity}`);
+            } else {
+                // Prepare the output_data as a list of dictionaries
+                const output_data = [{
+                    item_no: itemcode,
+                    employee_id: employeeid,
+                    process_code: processCode,
+                    process_name: processName,
+                    lot_quantity: lotQuantity,
+                    good_quantity: goodQuantity,
+                    defect_quantity: defectQuantity,
+                    time_start: startTime,
+                    time_end: endTime
+                }];
+
+                const data = {
+                    lot_no: lotno,
+                    current_status: current_status,
+                    output_data: output_data,
+                    current_process_index: currentProcessIndex
+                };
+
+                try {
+                    const response = await fetch(`/api/worker-output`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    });
+
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        console.log("Response from server:", responseData);
+                        showNotification("Output submitted successfully!", "success");
+                    } else {
+                        const errorMessage = await response.text();
+                        showNotification(`Error: ${errorMessage}`, "error");
+                    }
+                } catch (error) {
+                    console.error("Error submitting worker output:", error);
+                    showNotification("Error submitting worker output.", "error");
+                }
+
+                // Proceed to the next process only if the current one is valid
+                currentProcessIndex++;
+                displayNextProcess();
+            }
+        }
+
+        // Fetch Data Button Click Event
+        fetchDataBtn.addEventListener("click", async () => {
+            lotno = parseInt(lotNoInput.value.trim());
+
+            if (!lotno) {
+                return;  // Do nothing, no error message on page load
+            }
+
+            console.log(`Fetching data for Lot Number: ${lotno}`);
+
+            const fetchedItemCode = await fetchLotData(lotno);
+            if (fetchedItemCode) {
+                console.log(`Fetched item code: ${fetchedItemCode}`);
+                await fetchWorkerData(employeeid);
+                await fetchProductData(fetchedItemCode);
+            } else {
+                showNotification("Invalid lot number or item not found.", "error");
+                console.log("Lot number or item code not found.");
+            }
+        });
+
+        // Initialize on Page Load
+        window.onload = function() {
+            processContainer.innerHTML = "";
+            console.log("Page Loaded: Process container cleared");
+        };
+
+    </script>
+
+</body>
+</html>
