@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Admin Dashboard - Employee Portal</title>
     <!-- Tailwind CSS and DaisyUI CDN -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- html5-qrcode library for QR scanning -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         .sidebar-transition {
             transition: width 0.3s ease, transform 0.3s ease;
@@ -31,6 +33,42 @@
         }
         .scrollable-table::-webkit-scrollbar-thumb:hover {
             background: #555;
+        }
+        /* QR Reader styling */
+        #qr-reader {
+            width: 100%;
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+        #qr-reader video {
+            border-radius: 1rem;
+            width: 100%;
+            object-fit: cover;
+        }
+        .scan-region-indicator {
+            position: relative;
+        }
+        .scan-region-indicator::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 2px solid rgba(0, 255, 255, 0.4);
+            border-radius: 1rem;
+            pointer-events: none;
+        }
+        /* Animation for verification result */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .result-animation {
+            animation: slideIn 0.3s ease-out;
         }
     </style>
 </head>
@@ -123,9 +161,9 @@
                             </a>
                         </li>
                         <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                            <a href="#" id="qrVerifyLink" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
                                 <i class="fas fa-camera w-5"></i>
-                                <span>Verify QR</span>
+                                <span>QR Verify</span>
                             </a>
                         </li>
                         <li>
@@ -219,7 +257,6 @@
                                 </tr>
                             </thead>
                             <tbody id="workersTableBody">
-                                <!-- Workers will be inserted here -->
                                 <tr>
                                     <td colspan="3" class="text-center py-8 text-base-content/50">
                                         <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
@@ -280,6 +317,59 @@
         </div>
     </div>
 
+    <!-- QR Scanner Modal with Verification Results -->
+    <dialog id="qrScannerModal" class="modal modal-bottom sm:modal-middle">
+        <div class="modal-box p-0 overflow-hidden max-w-lg w-full rounded-2xl max-h-[90vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center p-4 border-b border-base-200 bg-base-100 sticky top-0 z-10">
+                <h3 class="text-xl font-bold flex items-center gap-2">
+                    <i class="fas fa-camera text-primary text-xl"></i>
+                    <span>QR Code Scanner & Verification</span>
+                </h3>
+                <button onclick="closeQRModal()" class="btn btn-sm btn-circle btn-ghost">✕</button>
+            </div>
+            
+            <!-- Scrollable content -->
+            <div class="flex-1 overflow-y-auto">
+                <!-- Camera feed container -->
+                <div class="p-4 bg-base-200">
+                    <div id="qr-reader" class="scan-region-indicator w-full bg-black rounded-xl overflow-hidden shadow-inner"></div>
+                    
+                    <!-- Scan Status -->
+                    <div id="scan-status" class="mt-3 text-sm text-center text-base-content/70 hidden">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>
+                        <span>Scanning for QR code...</span>
+                    </div>
+                    
+                    <!-- Verification Result Display -->
+                    <div id="verification-result" class="mt-4 hidden result-animation">
+                        <!-- Dynamic content will be inserted here -->
+                    </div>
+                    
+                    <!-- Camera Controls -->
+                    <div class="flex gap-2 mt-4 justify-between items-center">
+                        <button id="restartScannerBtn" class="btn btn-outline btn-sm">
+                            <i class="fas fa-sync-alt mr-1"></i>
+                            Restart Camera
+                        </button>
+                        <button id="stopScannerBtn" class="btn btn-error btn-sm btn-outline">
+                            <i class="fas fa-stop mr-1"></i>
+                            Stop Camera
+                        </button>
+                    </div>
+                    <p class="text-xs text-center text-base-content/60 mt-3">
+                        📷 Position QR code in front of camera. Verification happens automatically.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Modal footer -->
+            <div class="modal-action p-4 border-t border-base-200 bg-base-100 sticky bottom-0">
+                <button onclick="closeQRModal()" class="btn btn-block">Close</button>
+            </div>
+        </div>
+    </dialog>
+
     <!-- Create Worker Modal -->
     <dialog id="userModal" class="modal">
         <div class="modal-box">
@@ -331,7 +421,312 @@
     </dialog>
 
     <script>
-        // Function to get role badge color (only Admin and User)
+        // Configuration
+        const API_BASE_URL = window.location.origin; // Use current origin, can be changed to localhost:8000 if needed
+        
+        // QR Scanner Variables
+        let html5QrCode = null;
+        let isScanning = false;
+        let isProcessing = false;
+        const qrReaderElementId = "qr-reader";
+        const verificationResultDiv = document.getElementById("verification-result");
+        const scanStatusDiv = document.getElementById("scan-status");
+        
+        // Function to call verification endpoint
+        async function verifyQRCode(qrData) {
+            try {
+                // Parse QR data - expecting JSON format with qr_uuid and scanned_data
+                let parsedData;
+                try {
+                    parsedData = JSON.parse(qrData);
+                } catch (e) {
+                    // If not JSON, try to see if it's just a UUID
+                    if (qrData.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+                        // It's just a UUID, but we need full data structure
+                        throw new Error("QR code contains only UUID. Full data structure required for verification.");
+                    }
+                    throw new Error("Invalid QR code format. Expected JSON data.");
+                }
+                
+                // Validate required fields
+                if (!parsedData.qr_uuid) {
+                    throw new Error("QR code missing qr_uuid field");
+                }
+                if (!parsedData.scanned_data) {
+                    throw new Error("QR code missing scanned_data field");
+                }
+                
+                // Call verification endpoint
+                const response = await fetch(`${API_BASE_URL}/verify/scan`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        qr_uuid: parsedData.qr_uuid,
+                        scanned_data: parsedData.scanned_data
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || "Verification failed");
+                }
+                
+                return result;
+                
+            } catch (error) {
+                console.error("Verification error:", error);
+                return {
+                    verified: false,
+                    status: "NO_GOOD",
+                    message: `Verification error: ${error.message}`,
+                    error: true
+                };
+            }
+        }
+        
+        // Function to display verification result
+        function displayVerificationResult(result) {
+            verificationResultDiv.classList.remove("hidden");
+            verificationResultDiv.classList.add("result-animation");
+            
+            const isGood = result.verified === true;
+            const statusColor = isGood ? "success" : "error";
+            const statusIcon = isGood ? "✅" : "❌";
+            
+            let html = `
+                <div class="alert alert-${statusColor} shadow-lg">
+                    <div>
+                        <span class="text-2xl">${statusIcon}</span>
+                        <div class="flex-1">
+                            <h3 class="font-bold text-lg">Verification ${isGood ? "PASSED" : "FAILED"}</h3>
+                            <p class="text-sm mt-1">${result.message || (isGood ? "Item is GOOD" : "Item is NO GOOD")}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add QR data details if available
+            if (result.qr_data) {
+                html += `
+                    <div class="mt-3 p-3 bg-base-100 rounded-lg border border-base-200">
+                        <p class="text-xs font-semibold text-base-content/70 mb-2">QR CODE DETAILS:</p>
+                        <div class="space-y-1 text-sm">
+                            <p><span class="font-medium">QR UUID:</span> <code class="text-xs">${result.qr_data.qr_uuid}</code></p>
+                            <p><span class="font-medium">Item:</span> ${result.qr_data.item}</p>
+                            <p><span class="font-medium">Part:</span> ${result.qr_data.part.name} (${result.qr_data.part.maker})</p>
+                            <p><span class="font-medium">Lot No:</span> ${result.qr_data.lot_no}</p>
+                            ${result.qr_data.verified_at ? `<p><span class="font-medium">Verified At:</span> ${new Date(result.qr_data.verified_at).toLocaleString()}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Add mismatches if any
+            if (result.mismatches && result.mismatches.length > 0) {
+                html += `
+                    <div class="mt-3 p-3 bg-error/10 rounded-lg border border-error/20">
+                        <p class="text-xs font-semibold text-error mb-2">MISMATCHES FOUND:</p>
+                        <ul class="list-disc list-inside text-sm space-y-1">
+                            ${result.mismatches.map(m => `<li class="text-error/80">${m}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            verificationResultDiv.innerHTML = html;
+            
+            // Auto scroll to result
+            verificationResultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        
+        // QR Scanner Success Callback
+        async function onQRCodeScanned(decodedText) {
+            if (isProcessing) return;
+            isProcessing = true;
+            
+            // Stop scanning immediately
+            if (html5QrCode && isScanning) {
+                try {
+                    await html5QrCode.stop();
+                    isScanning = false;
+                } catch (err) {
+                    console.warn("Error stopping scanner:", err);
+                }
+            }
+            
+            // Show scanning status
+            scanStatusDiv.classList.remove("hidden");
+            scanStatusDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i><span>Verifying QR code...</span>';
+            
+            // Call verification endpoint
+            const verificationResult = await verifyQRCode(decodedText);
+            
+            // Hide scanning status
+            scanStatusDiv.classList.add("hidden");
+            
+            // Display result
+            displayVerificationResult(verificationResult);
+            
+            isProcessing = false;
+        }
+        
+        async function startQrScanner() {
+            if (html5QrCode && isScanning) {
+                try {
+                    await html5QrCode.stop();
+                } catch (err) {
+                    console.warn("Error stopping previous scanner:", err);
+                }
+                isScanning = false;
+            }
+            
+            // Clear previous results
+            verificationResultDiv.classList.add("hidden");
+            verificationResultDiv.innerHTML = "";
+            scanStatusDiv.classList.add("hidden");
+            isProcessing = false;
+            
+            const readerElement = document.getElementById(qrReaderElementId);
+            if (readerElement) {
+                while (readerElement.firstChild) {
+                    readerElement.removeChild(readerElement.firstChild);
+                }
+            }
+            
+            html5QrCode = new Html5Qrcode(qrReaderElementId);
+            
+            const config = {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+                showTorchButtonIfSupported: true,
+                showZoomSliderIfSupported: true,
+            };
+            
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    onQRCodeScanned,
+                    (errorMessage) => {
+                        // Silent error handling for non-critical errors
+                        if (errorMessage && !errorMessage.includes("No MultiFormat Readers")) {
+                            console.debug("QR Scan debug:", errorMessage);
+                        }
+                    }
+                );
+                isScanning = true;
+                console.log("QR Scanner started successfully");
+                
+                // Enable/disable buttons
+                const restartBtn = document.getElementById("restartScannerBtn");
+                const stopBtn = document.getElementById("stopScannerBtn");
+                if (restartBtn) restartBtn.disabled = false;
+                if (stopBtn) stopBtn.disabled = false;
+                
+            } catch (err) {
+                console.error("Failed to start QR scanner:", err);
+                verificationResultDiv.classList.remove("hidden");
+                verificationResultDiv.innerHTML = `
+                    <div class="alert alert-error shadow-lg">
+                        <div>
+                            <span class="text-2xl">❌</span>
+                            <div>
+                                <h3 class="font-bold">Camera Error</h3>
+                                <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                isScanning = false;
+            }
+        }
+        
+        async function stopQrScanner() {
+            if (html5QrCode && isScanning) {
+                try {
+                    await html5QrCode.stop();
+                    isScanning = false;
+                    const readerElement = document.getElementById(qrReaderElementId);
+                    if (readerElement) {
+                        while (readerElement.firstChild) {
+                            readerElement.removeChild(readerElement.firstChild);
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error stopping scanner:", err);
+                }
+            }
+        }
+        
+        async function restartScanner() {
+            await stopQrScanner();
+            setTimeout(() => {
+                startQrScanner();
+            }, 100);
+        }
+        
+        function openQRModal() {
+            const qrModal = document.getElementById("qrScannerModal");
+            if (qrModal) {
+                qrModal.showModal();
+                setTimeout(() => {
+                    startQrScanner();
+                }, 200);
+            }
+        }
+        
+        function closeQRModal() {
+            const qrModal = document.getElementById("qrScannerModal");
+            if (qrModal) {
+                stopQrScanner();
+                qrModal.close();
+            }
+        }
+        
+        // Attach QR Verify link handler
+        const qrVerifyLink = document.getElementById("qrVerifyLink");
+        if (qrVerifyLink) {
+            qrVerifyLink.addEventListener("click", (e) => {
+                e.preventDefault();
+                openQRModal();
+            });
+        }
+        
+        // QR Modal event listeners
+        const qrModal = document.getElementById("qrScannerModal");
+        if (qrModal) {
+            qrModal.addEventListener("close", () => {
+                stopQrScanner();
+                verificationResultDiv.classList.add("hidden");
+                verificationResultDiv.innerHTML = "";
+                scanStatusDiv.classList.add("hidden");
+                isProcessing = false;
+            });
+        }
+        
+        const restartBtn = document.getElementById("restartScannerBtn");
+        if (restartBtn) {
+            restartBtn.addEventListener("click", () => {
+                if (qrModal && qrModal.open) {
+                    restartScanner();
+                }
+            });
+        }
+        
+        const stopBtn = document.getElementById("stopScannerBtn");
+        if (stopBtn) {
+            stopBtn.addEventListener("click", () => {
+                if (qrModal && qrModal.open) {
+                    stopQrScanner();
+                }
+            });
+        }
+
+        // Worker Management Functions (existing code)
         function getRoleBadgeColor(role) {
             switch(role?.toLowerCase()) {
                 case 'admin':
@@ -343,7 +738,6 @@
             }
         }
 
-        // Function to fetch all workers from API
         async function fetchAllWorkers() {
             const tableBody = document.getElementById("workersTableBody");
             const workersStatus = document.getElementById("workersStatus");
@@ -357,7 +751,6 @@
             try {
                 tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Loading workers...</p></td></tr>';
                 
-                // Try multiple possible endpoints
                 const endpoints = [
                     '/workers/',
                     '/api/workers/',
@@ -388,8 +781,6 @@
 
                 if (data.workers && data.workers.length > 0) {
                     tableBody.innerHTML = '';
-                    
-                    // Counters
                     let adminTotal = 0;
                     let userTotal = 0;
                     
@@ -397,7 +788,6 @@
                         const row = document.createElement('tr');
                         row.className = 'hover:bg-base-200/50 transition-all duration-200';
                         
-                        // Count roles
                         if (worker.role?.toLowerCase() === 'admin') {
                             adminTotal++;
                         } else if (worker.role?.toLowerCase() === 'user') {
@@ -416,17 +806,13 @@
                         tableBody.appendChild(row);
                     });
                     
-                    // Update counts
                     const total = data.count || data.workers.length;
                     workersCount.textContent = `Total: ${total} workers`;
                     totalWorkers.textContent = total;
                     adminCount.textContent = adminTotal;
                     userCount.textContent = userTotal;
-                    
-                    // Update sidebar counts
                     sidebarUserCount.textContent = userTotal;
                     sidebarAdminCount.textContent = adminTotal;
-                    
                     workersStatus.textContent = "";
                 } else {
                     tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-users text-4xl mb-2 opacity-30"></i><p>No workers found</p></td></tr>';
@@ -447,7 +833,6 @@
             }
         }
 
-        // Worker creation form
         document.getElementById("workerForm")?.addEventListener("submit", async (event) => {
             event.preventDefault();
 
@@ -462,7 +847,6 @@
             const modalStatus = document.getElementById("modalStatus");
             
             try {
-                // Try multiple endpoints for POST
                 const endpoints = [
                     '/api/worker',
                     '/worker',
@@ -496,10 +880,7 @@
                             }
                             
                             if (success) {
-                                // Refresh the list
                                 fetchAllWorkers();
-                                
-                                // Reset form and close modal after delay
                                 setTimeout(() => {
                                     document.getElementById("workerForm").reset();
                                     modalStatus.textContent = "";
@@ -526,13 +907,10 @@
             }
         });
 
-        // Refresh button click handler
-        document.getElementById("refreshButton").addEventListener("click", fetchAllWorkers);
-
-        // Load workers when page loads
+        document.getElementById("refreshButton")?.addEventListener("click", fetchAllWorkers);
         document.addEventListener('DOMContentLoaded', fetchAllWorkers);
 
-        // Sidebar toggle function
+        // Sidebar functions
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('overlay');
@@ -558,10 +936,8 @@
             }
         }
 
-        // Menu button click handler
-        document.getElementById('menuBtn').addEventListener('click', toggleSidebar);
+        document.getElementById('menuBtn')?.addEventListener('click', toggleSidebar);
 
-        // Handle window resize
         window.addEventListener('resize', function() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('overlay');
@@ -575,7 +951,6 @@
             }
         });
 
-        // Modal Functions
         function openUserModal() {
             document.getElementById('userModal').showModal();
         }
@@ -584,7 +959,6 @@
             document.getElementById('userModal').close();
         }
 
-        // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('userModal');
             if (event.target === modal) {
