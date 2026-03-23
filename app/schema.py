@@ -217,3 +217,11 @@ class ErrorResponseSchema(Schema):
 
 class DeleteResponseSchema(Schema):
     message: str
+
+class DirectQRScanSchema(Schema):
+    """Schema for direct QR scan where the QR contains all data"""
+    qr_uuid: str
+    item: str
+    part: ScannedPartSchema  # Reuse existing ScannedPartSchema
+    lot_no: str
+    status: Optional[str] = None  # Optional since it might be null initially

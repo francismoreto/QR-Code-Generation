@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Admin Dashboard - Employee Portal</title>
+    <title>Admin Dashboard - QR Verification System</title>
     <!-- Tailwind CSS and DaisyUI CDN -->
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -14,7 +14,6 @@
         .sidebar-transition {
             transition: width 0.3s ease, transform 0.3s ease;
         }
-        /* Custom scrollbar styling */
         .scrollable-table {
             max-height: 400px;
             overflow-y: auto;
@@ -34,7 +33,6 @@
         .scrollable-table::-webkit-scrollbar-thumb:hover {
             background: #555;
         }
-        /* QR Reader styling */
         #qr-reader {
             width: 100%;
             border-radius: 1rem;
@@ -56,7 +54,6 @@
             border-radius: 1rem;
             pointer-events: none;
         }
-        /* Animation for verification result */
         @keyframes slideIn {
             from {
                 opacity: 0;
@@ -70,19 +67,102 @@
         .result-animation {
             animation: slideIn 0.3s ease-out;
         }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .debug-console {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 450px;
+            max-width: 90vw;
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border-radius: 12px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 1px solid #313244;
+        }
+        .debug-console-header {
+            padding: 8px 12px;
+            background: #181825;
+            border-radius: 12px 12px 0 0;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #313244;
+        }
+        .debug-console-title {
+            font-weight: bold;
+            font-size: 12px;
+            color: #89b4fa;
+        }
+        .debug-console-content {
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 8px;
+            font-size: 11px;
+        }
+        .debug-console-content p {
+            margin: 4px 0;
+            padding: 4px;
+            border-left: 3px solid;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+        .debug-info { border-left-color: #89b4fa; }
+        .debug-success { border-left-color: #a6e3a1; color: #a6e3a1; }
+        .debug-error { border-left-color: #f38ba8; color: #f38ba8; }
+        .debug-warning { border-left-color: #f9e2af; color: #f9e2af; }
+        .debug-raw { border-left-color: #cba6f7; color: #cba6f7; font-family: monospace; }
+        .debug-console-toggle {
+            background: none;
+            border: none;
+            color: #cdd6f4;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .debug-console-toggle:hover { opacity: 0.8; }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
-    <!-- Navbar with sample branding (similar to login page) -->
+    <!-- Debug Console Panel -->
+    <div class="debug-console" id="debugConsole">
+        <div class="debug-console-header" onclick="toggleDebugConsole()">
+            <span class="debug-console-title">
+                <i class="fas fa-terminal mr-2"></i>QR Scanner Debug Console
+            </span>
+            <button class="debug-console-toggle" onclick="event.stopPropagation(); clearDebugConsole()">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+        <div class="debug-console-content" id="debugConsoleContent">
+            <p class="debug-info">✅ Debug console ready. Scanning QR codes will show detailed logs here.</p>
+        </div>
+    </div>
+
+    <!-- Navbar -->
     <div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-30">
         <div class="flex-1">
             <button id="menuBtn" class="btn btn-ghost btn-circle mr-2">
                 <i class="fas fa-bars text-xl"></i>
             </button>
-            <a class="btn btn-ghost text-xl">daisyUI</a>
+            <a class="btn btn-ghost text-xl">QR Admin System</a>
         </div>
         <div class="flex-none gap-2">
-            <span class="text-sm text-base-content/70 hidden sm:inline">Admin Dashboard</span>
+            <span class="text-sm text-base-content/70 hidden sm:inline">QR Verification Portal</span>
             <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
                     <div class="w-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
@@ -100,16 +180,13 @@
 
     <!-- Main content with sidebar -->
     <div class="flex relative">
-        <!-- Overlay for mobile when sidebar is open -->
         <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeSidebar()"></div>
 
-        <!-- Sidebar - Hidden by default, expands when clicked -->
+        <!-- Sidebar -->
         <div id="sidebar" class="fixed left-0 top-0 h-full w-72 bg-base-100 shadow-2xl z-50 sidebar-transition -translate-x-full lg:translate-x-0 lg:relative lg:top-auto lg:h-[calc(100vh-64px)] lg:z-40">
-            <!-- Close button for mobile -->
             <button onclick="closeSidebar()" class="btn btn-ghost btn-circle absolute right-2 top-2 lg:hidden">
                 <i class="fas fa-times"></i>
             </button>
-
             <div class="p-6 border-b border-base-200">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
@@ -117,367 +194,265 @@
                     </div>
                     <div>
                         <span class="text-lg font-bold text-base-content">QR Admin</span>
-                        <p class="text-xs text-base-content/50 mt-0.5">Management Portal</p>
+                        <p class="text-xs text-base-content/50 mt-0.5">Verification System</p>
                     </div>
                 </div>
             </div>
-            
-            <!-- Sidebar Menu -->
             <div class="p-4 overflow-y-auto h-[calc(100%-180px)]">
                 <div class="mb-6">
                     <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">Main</p>
                     <ul class="space-y-1">
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary text-primary-content font-medium">
-                                <i class="fas fa-users w-5"></i>
-                                <span>Users</span>
-                                <span id="sidebarUserCount" class="ml-auto bg-primary-content/20 text-primary-content text-xs px-2 py-1 rounded-full">0</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-user-shield w-5"></i>
-                                <span>Admins</span>
-                                <span id="sidebarAdminCount" class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">0</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-boxes w-5"></i>
-                                <span>Master Items</span>
-                                <span class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">1.2k</span>
-                            </a>
-                        </li>
+                        <li><a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary text-primary-content font-medium"><i class="fas fa-users w-5"></i><span>Dashboard</span></a></li>
+                        <li><a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-boxes w-5"></i><span>Inventory</span></a></li>
                     </ul>
                 </div>
-                
                 <div class="mb-6">
                     <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">QR Operations</p>
                     <ul class="space-y-1">
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-qrcode w-5"></i>
-                                <span>Generate QR</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" id="qrVerifyLink" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-camera w-5"></i>
-                                <span>QR Verify</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-history w-5"></i>
-                                <span>Logs</span>
-                                <span class="ml-auto bg-base-200 text-base-content text-xs px-2 py-1 rounded-full">New</span>
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-                
-                <div class="mb-6">
-                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">System</p>
-                    <ul class="space-y-1">
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
-                                <i class="fas fa-cog w-5"></i>
-                                <span>Settings</span>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-error hover:bg-error/10 transition-all duration-200">
-                                <i class="fas fa-sign-out-alt w-5"></i>
-                                <span>Logout</span>
-                            </a>
-                        </li>
+                        <li><a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-qrcode w-5"></i><span>Generate QR</span></a></li>
+                        <li><a href="#" id="qrVerifyLink" class="flex items-center gap-3 px-4 py-3 rounded-lg text-primary font-semibold bg-primary/10 hover:bg-primary/20"><i class="fas fa-camera w-5"></i><span>QR Verify</span></a></li>
+                        <li><a href="#" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-history w-5"></i><span>Verification Logs</span></a></li>
                     </ul>
                 </div>
             </div>
-            
-            <!-- User Profile at Bottom -->
             <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-base-200 bg-base-100">
                 <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
-                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-content font-semibold shadow-sm">
-                        <span>AD</span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="font-semibold text-base-content truncate">Admin User</p>
-                        <p class="text-xs text-base-content/50 truncate">admin@example.com</p>
-                    </div>
-                    <div class="dropdown dropdown-end">
-                        <div tabindex="0" role="button" class="btn btn-ghost btn-xs btn-circle">
-                            <i class="fas fa-chevron-down text-base-content/50"></i>
-                        </div>
-                        <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-box shadow-lg p-2 w-52 z-[1]">
-                            <li><a class="text-sm">Profile</a></li>
-                            <li><a class="text-sm">Account Settings</a></li>
-                            <li class="divider my-1"></li>
-                            <li><a class="text-sm text-error">Logout</a></li>
-                        </ul>
-                    </div>
+                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-content font-semibold shadow-sm"><span>AD</span></div>
+                    <div class="flex-1 min-w-0"><p class="font-semibold text-base-content truncate">Admin User</p><p class="text-xs text-base-content/50 truncate">admin@example.com</p></div>
                 </div>
             </div>
         </div>
 
         <!-- Main Content Area -->
         <div id="mainContent" class="flex-1 p-6 md:p-8 w-full lg:w-auto">
-            <!-- Header with Create User Button -->
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-                <div>
-                    <h1 class="text-3xl font-bold text-base-content">Worker Management</h1>
-                    <p class="text-base-content/70 mt-1">View all registered workers</p>
-                </div>
-                <button onclick="openUserModal()" class="btn btn-primary">
-                    <i class="fas fa-plus mr-2"></i>
-                    Create New Worker
-                </button>
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-base-content">QR Code Verification System</h1>
+                <p class="text-base-content/70 mt-1">Scan QR codes to verify items against database records</p>
             </div>
-
-            <!-- Workers List - Shows only First Name, Last Name, and Role -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Total Items</p><p class="text-3xl font-bold text-base-content mt-1">1,284</p></div><div class="bg-primary/10 p-4 rounded-2xl"><i class="fas fa-box text-2xl text-primary"></i></div></div></div></div>
+                <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Today's Scans</p><p id="scanCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-secondary/10 p-4 rounded-2xl"><i class="fas fa-camera text-2xl text-secondary"></i></div></div></div></div>
+                <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Verified Items</p><p id="verifiedCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-success/10 p-4 rounded-2xl"><i class="fas fa-check-circle text-2xl text-success"></i></div></div></div></div>
+            </div>
             <div class="card bg-base-100 shadow-xl">
                 <div class="card-body">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-xl font-semibold">All Workers</h2>
-                        <button id="refreshButton" class="btn btn-sm btn-primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            Refresh
-                        </button>
-                    </div>
-                    
-                    <div class="scrollable-table">
-                        <table class="table w-full">
-                            <thead>
-                                <tr>
-                                    <th class="sticky top-0 bg-base-200">First Name</th>
-                                    <th class="sticky top-0 bg-base-200">Last Name</th>
-                                    <th class="sticky top-0 bg-base-200">Role</th>
-                                </tr>
-                            </thead>
-                            <tbody id="workersTableBody">
-                                <tr>
-                                    <td colspan="3" class="text-center py-8 text-base-content/50">
-                                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-                                        <p>Loading workers...</p>
-                                    </td>
-                                </tr>
-                            </tbody>
+                    <h2 class="text-xl font-semibold mb-4">Recent QR Verifications</h2>
+                    <div class="overflow-x-auto">
+                        <table class="table table-zebra w-full">
+                            <thead><tr><th>Timestamp</th><th>QR UUID</th><th>Item</th><th>Status</th><th>Result</th></thead>
+                            <tbody id="verificationHistoryTable"><tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr></tbody>
                         </table>
-                    </div>
-                    
-                    <div id="workersCount" class="text-right mt-2 text-sm text-base-content/50"></div>
-                    <div id="workersStatus" class="text-center font-bold text-lg mt-4"></div>
-                </div>
-            </div>
-            
-            <!-- Worker Stats Summary -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body p-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-base-content/70 text-sm font-medium">Total Workers</p>
-                                <p id="totalWorkers" class="text-3xl font-bold text-base-content mt-1">0</p>
-                            </div>
-                            <div class="bg-primary/10 p-4 rounded-2xl">
-                                <i class="fas fa-users text-2xl text-primary"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body p-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-base-content/70 text-sm font-medium">Admins</p>
-                                <p id="adminCount" class="text-3xl font-bold text-base-content mt-1">0</p>
-                            </div>
-                            <div class="bg-secondary/10 p-4 rounded-2xl">
-                                <i class="fas fa-user-shield text-2xl text-secondary"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body p-6">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <p class="text-base-content/70 text-sm font-medium">Users</p>
-                                <p id="userCount" class="text-3xl font-bold text-base-content mt-1">0</p>
-                            </div>
-                            <div class="bg-success/10 p-4 rounded-2xl">
-                                <i class="fas fa-user text-2xl text-success"></i>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- QR Scanner Modal with Verification Results -->
+    <!-- QR Scanner Modal -->
     <dialog id="qrScannerModal" class="modal modal-bottom sm:modal-middle">
         <div class="modal-box p-0 overflow-hidden max-w-lg w-full rounded-2xl max-h-[90vh] flex flex-col">
-            <!-- Modal Header -->
             <div class="flex justify-between items-center p-4 border-b border-base-200 bg-base-100 sticky top-0 z-10">
-                <h3 class="text-xl font-bold flex items-center gap-2">
-                    <i class="fas fa-camera text-primary text-xl"></i>
-                    <span>QR Code Scanner & Verification</span>
-                </h3>
+                <h3 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-camera text-primary text-xl"></i><span>QR Code Scanner</span></h3>
                 <button onclick="closeQRModal()" class="btn btn-sm btn-circle btn-ghost">✕</button>
             </div>
-            
-            <!-- Scrollable content -->
             <div class="flex-1 overflow-y-auto">
-                <!-- Camera feed container -->
                 <div class="p-4 bg-base-200">
-                    <div id="qr-reader" class="scan-region-indicator w-full bg-black rounded-xl overflow-hidden shadow-inner"></div>
-                    
-                    <!-- Scan Status -->
-                    <div id="scan-status" class="mt-3 text-sm text-center text-base-content/70 hidden">
-                        <i class="fas fa-spinner fa-spin mr-1"></i>
-                        <span>Scanning for QR code...</span>
-                    </div>
-                    
-                    <!-- Verification Result Display -->
-                    <div id="verification-result" class="mt-4 hidden result-animation">
-                        <!-- Dynamic content will be inserted here -->
-                    </div>
-                    
-                    <!-- Camera Controls -->
+                    <div id="qr-reader" class="scan-region-indicator w-full bg-black rounded-xl overflow-hidden shadow-inner" style="min-height: 300px;"></div>
+                    <div id="scan-status" class="mt-3 text-sm text-center text-base-content/70 hidden"><div class="loading-spinner mr-2"></div><span>Verifying QR code...</span></div>
+                    <div id="verification-result" class="mt-4 hidden result-animation"></div>
                     <div class="flex gap-2 mt-4 justify-between items-center">
-                        <button id="restartScannerBtn" class="btn btn-outline btn-sm">
-                            <i class="fas fa-sync-alt mr-1"></i>
-                            Restart Camera
-                        </button>
-                        <button id="stopScannerBtn" class="btn btn-error btn-sm btn-outline">
-                            <i class="fas fa-stop mr-1"></i>
-                            Stop Camera
-                        </button>
+                        <button id="restartScannerBtn" class="btn btn-outline btn-sm"><i class="fas fa-sync-alt mr-1"></i>Restart Camera</button>
+                        <button id="stopScannerBtn" class="btn btn-error btn-sm btn-outline"><i class="fas fa-stop mr-1"></i>Stop Camera</button>
                     </div>
-                    <p class="text-xs text-center text-base-content/60 mt-3">
-                        📷 Position QR code in front of camera. Verification happens automatically.
-                    </p>
+                    <p class="text-xs text-center text-base-content/60 mt-3">📷 Position QR code in front of camera. Verification happens automatically.</p>
+                    <p class="text-xs text-center text-primary/70 mt-1"><i class="fas fa-info-circle"></i> QR code must contain: qr_uuid, item, part (name & maker), lot_no</p>
                 </div>
             </div>
-            
-            <!-- Modal footer -->
-            <div class="modal-action p-4 border-t border-base-200 bg-base-100 sticky bottom-0">
-                <button onclick="closeQRModal()" class="btn btn-block">Close</button>
-            </div>
-        </div>
-    </dialog>
-
-    <!-- Create Worker Modal -->
-    <dialog id="userModal" class="modal">
-        <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">Create New Worker</h3>
-            <form method="dialog" id="workerForm">
-                <div class="space-y-4">
-                    <div>
-                        <label class="label" for="first_name">
-                            <span class="label-text">First Name</span>
-                        </label>
-                        <input type="text" id="first_name" placeholder="Enter first name" class="input input-bordered w-full" required />
-                    </div>
-                    <div>
-                        <label class="label" for="last_name">
-                            <span class="label-text">Last Name</span>
-                        </label>
-                        <input type="text" id="last_name" placeholder="Enter last name" class="input input-bordered w-full" required />
-                    </div>
-                    <div>
-                        <label class="label" for="employee_id">
-                            <span class="label-text">Employee ID</span>
-                        </label>
-                        <input type="text" id="employee_id" placeholder="Enter employee ID" class="input input-bordered w-full" required />
-                    </div>
-                    <div>
-                        <label class="label" for="username">
-                            <span class="label-text">Username</span>
-                        </label>
-                        <input type="text" id="username" placeholder="Enter username" class="input input-bordered w-full" required />
-                    </div>
-                    <div>
-                        <label class="label" for="role">
-                            <span class="label-text">Role</span>
-                        </label>
-                        <select id="role" class="select select-bordered w-full" required>
-                            <option value="">Select Role</option>
-                            <option value="Admin">Admin</option>
-                            <option value="User">User</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-action">
-                    <button type="submit" class="btn btn-primary">Create Worker</button>
-                    <button type="button" class="btn" onclick="closeUserModal()">Cancel</button>
-                </div>
-            </form>
-            <div id="modalStatus" class="text-center font-bold text-sm mt-2"></div>
+            <div class="modal-action p-4 border-t border-base-200 bg-base-100 sticky bottom-0"><button onclick="closeQRModal()" class="btn btn-block">Close</button></div>
         </div>
     </dialog>
 
     <script>
-        // Configuration
-        const API_BASE_URL = window.location.origin; // Use current origin, can be changed to localhost:8000 if needed
+        // Debug Console Functions
+        function addDebugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const container = document.getElementById('debugConsoleContent');
+            if (container) {
+                const logElement = document.createElement('p');
+                logElement.className = `debug-${type}`;
+                logElement.innerHTML = `<span style="color:#6c7086;">[${timestamp}]</span> ${message}`;
+                container.insertBefore(logElement, container.firstChild);
+                if (container.children.length > 60) {
+                    container.removeChild(container.lastChild);
+                }
+            }
+            console.log(`[QR Debug] ${message}`);
+        }
         
-        // QR Scanner Variables
+        function clearDebugConsole() {
+            const container = document.getElementById('debugConsoleContent');
+            if (container) {
+                container.innerHTML = '<p class="debug-info">✅ Debug console cleared. Ready for new scans.</p>';
+            }
+        }
+        
+        function toggleDebugConsole() {
+            const content = document.getElementById('debugConsoleContent');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+            } else {
+                content.style.display = 'none';
+            }
+        }
+        
+        // Configuration - Try multiple API endpoint patterns
+        const API_ENDPOINTS = [
+            '/api/verify/direct-scan',
+            '/verify/direct-scan', 
+            '/api/qr/verify/direct-scan',
+            '/qr/verify/direct-scan',
+            '/api/verify/scan',
+            '/verify/scan'
+        ];
+        
+        let currentEndpointIndex = 0;
         let html5QrCode = null;
         let isScanning = false;
         let isProcessing = false;
+        let scanCount = 0;
+        let verifiedCount = 0;
         const qrReaderElementId = "qr-reader";
         const verificationResultDiv = document.getElementById("verification-result");
         const scanStatusDiv = document.getElementById("scan-status");
+        const verificationHistoryBody = document.getElementById("verificationHistoryTable");
+        let verificationHistory = [];
         
-        // Function to call verification endpoint
-        async function verifyQRCode(qrData) {
+        function updateVerificationHistory(verificationData) {
+            verificationHistory.unshift(verificationData);
+            if (verificationHistory.length > 10) verificationHistory.pop();
+            
+            if (verificationHistory.length === 0) {
+                verificationHistoryBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>`;
+                return;
+            }
+            
+            verificationHistoryBody.innerHTML = verificationHistory.map(v => `
+                <tr class="hover:bg-base-200/50">
+                    <td class="text-sm">${v.timestamp}</td>
+                    <td class="text-xs font-mono">${v.qr_uuid.substring(0, 8)}...${v.qr_uuid.substring(v.qr_uuid.length-4)}</td>
+                    <td class="text-sm">${v.item}</td>
+                    <td><span class="badge badge-soft ${v.status === 'GOOD' ? 'badge-success' : 'badge-error'}">${v.status}</span></td>
+                    <td><span class="text-sm ${v.verified ? 'text-success' : 'text-error'}">${v.verified ? '✅ PASSED' : '❌ FAILED'}</span></td>
+                </tr>
+            `).join('');
+        }
+        
+        async function verifyDirectQRScan(qrData) {
+            addDebugLog(`========== START VERIFICATION ==========`, 'info');
+            addDebugLog(`Raw QR data: ${qrData.substring(0, 200)}${qrData.length > 200 ? '...' : ''}`, 'raw');
+            
             try {
-                // Parse QR data - expecting JSON format with qr_uuid and scanned_data
+                // Parse QR data
                 let parsedData;
                 try {
                     parsedData = JSON.parse(qrData);
+                    addDebugLog(`✅ Successfully parsed JSON`, 'success');
+                    addDebugLog(`Parsed keys: ${Object.keys(parsedData).join(', ')}`, 'info');
                 } catch (e) {
-                    // If not JSON, try to see if it's just a UUID
-                    if (qrData.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-                        // It's just a UUID, but we need full data structure
-                        throw new Error("QR code contains only UUID. Full data structure required for verification.");
-                    }
-                    throw new Error("Invalid QR code format. Expected JSON data.");
+                    addDebugLog(`❌ Failed to parse JSON: ${e.message}`, 'error');
+                    throw new Error("QR code is not valid JSON. Please ensure QR contains valid JSON format.");
                 }
                 
                 // Validate required fields
-                if (!parsedData.qr_uuid) {
-                    throw new Error("QR code missing qr_uuid field");
+                if (!parsedData.qr_uuid) throw new Error("Missing required field: qr_uuid");
+                if (!parsedData.item) throw new Error("Missing required field: item");
+                if (!parsedData.part || !parsedData.part.name || !parsedData.part.maker) {
+                    throw new Error("Missing required fields: part.name and part.maker");
                 }
-                if (!parsedData.scanned_data) {
-                    throw new Error("QR code missing scanned_data field");
+                if (!parsedData.lot_no) throw new Error("Missing required field: lot_no");
+                
+                addDebugLog(`✅ Validation passed`, 'success');
+                addDebugLog(`QR UUID: ${parsedData.qr_uuid}`, 'info');
+                addDebugLog(`Item: ${parsedData.item}`, 'info');
+                addDebugLog(`Part: ${parsedData.part.name} (${parsedData.part.maker})`, 'info');
+                addDebugLog(`Lot No: ${parsedData.lot_no}`, 'info');
+                
+                const payload = {
+                    qr_uuid: parsedData.qr_uuid,
+                    item: parsedData.item,
+                    part: { name: parsedData.part.name, maker: parsedData.part.maker },
+                    lot_no: parsedData.lot_no,
+                    status: parsedData.status || null
+                };
+                
+                addDebugLog(`Attempting to call API endpoint...`, 'info');
+                
+                // Try multiple endpoints
+                let lastError = null;
+                for (let i = 0; i < API_ENDPOINTS.length; i++) {
+                    const endpoint = API_ENDPOINTS[i];
+                    const fullUrl = `${window.location.origin}${endpoint}`;
+                    addDebugLog(`Trying endpoint ${i + 1}/${API_ENDPOINTS.length}: ${fullUrl}`, 'info');
+                    
+                    try {
+                        const response = await fetch(fullUrl, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(payload)
+                        });
+                        
+                        addDebugLog(`Response status: ${response.status} ${response.statusText}`, 'info');
+                        
+                        // Check if response is JSON
+                        const contentType = response.headers.get("content-type");
+                        if (contentType && contentType.includes("application/json")) {
+                            const result = await response.json();
+                            addDebugLog(`Response JSON: ${JSON.stringify(result, null, 2)}`, 'raw');
+                            
+                            if (response.ok) {
+                                addDebugLog(`✅ Success! Endpoint ${endpoint} works!`, 'success');
+                                
+                                // Update counts
+                                scanCount++;
+                                document.getElementById('scanCountDisplay').textContent = scanCount;
+                                if (result.verified) {
+                                    verifiedCount++;
+                                    document.getElementById('verifiedCountDisplay').textContent = verifiedCount;
+                                }
+                                
+                                updateVerificationHistory({
+                                    timestamp: new Date().toLocaleTimeString(),
+                                    qr_uuid: parsedData.qr_uuid,
+                                    item: parsedData.item,
+                                    status: result.status,
+                                    verified: result.verified
+                                });
+                                
+                                addDebugLog(`========== VERIFICATION SUCCESSFUL ==========`, 'success');
+                                return result;
+                            } else {
+                                addDebugLog(`❌ Server error: ${result.message || 'Unknown error'}`, 'error');
+                                lastError = result.message;
+                                // Continue to next endpoint
+                            }
+                        } else {
+                            const text = await response.text();
+                            addDebugLog(`Response is not JSON (first 200 chars): ${text.substring(0, 200)}`, 'warning');
+                            lastError = `Endpoint returned HTML/plain text (status ${response.status})`;
+                        }
+                    } catch (fetchError) {
+                        addDebugLog(`❌ Fetch error for ${endpoint}: ${fetchError.message}`, 'error');
+                        lastError = fetchError.message;
+                    }
                 }
                 
-                // Call verification endpoint
-                const response = await fetch(`${API_BASE_URL}/verify/scan`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        qr_uuid: parsedData.qr_uuid,
-                        scanned_data: parsedData.scanned_data
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(result.message || "Verification failed");
-                }
-                
-                return result;
+                // If we get here, all endpoints failed
+                throw new Error(`All API endpoints failed. Last error: ${lastError}`);
                 
             } catch (error) {
-                console.error("Verification error:", error);
+                addDebugLog(`❌ VERIFICATION ERROR: ${error.message}`, 'error');
+                addDebugLog(`========== VERIFICATION FAILED ==========`, 'error');
+                
                 return {
                     verified: false,
                     status: "NO_GOOD",
@@ -487,7 +462,6 @@
             }
         }
         
-        // Function to display verification result
         function displayVerificationResult(result) {
             verificationResultDiv.classList.remove("hidden");
             verificationResultDiv.classList.add("result-animation");
@@ -497,7 +471,7 @@
             const statusIcon = isGood ? "✅" : "❌";
             
             let html = `
-                <div class="alert alert-${statusColor} shadow-lg">
+                <div class="alert alert-${statusColor} shadow-lg mb-3">
                     <div>
                         <span class="text-2xl">${statusIcon}</span>
                         <div class="flex-1">
@@ -508,43 +482,47 @@
                 </div>
             `;
             
-            // Add QR data details if available
             if (result.qr_data) {
-                html += `
-                    <div class="mt-3 p-3 bg-base-100 rounded-lg border border-base-200">
-                        <p class="text-xs font-semibold text-base-content/70 mb-2">QR CODE DETAILS:</p>
-                        <div class="space-y-1 text-sm">
-                            <p><span class="font-medium">QR UUID:</span> <code class="text-xs">${result.qr_data.qr_uuid}</code></p>
-                            <p><span class="font-medium">Item:</span> ${result.qr_data.item}</p>
-                            <p><span class="font-medium">Part:</span> ${result.qr_data.part.name} (${result.qr_data.part.maker})</p>
-                            <p><span class="font-medium">Lot No:</span> ${result.qr_data.lot_no}</p>
-                            ${result.qr_data.verified_at ? `<p><span class="font-medium">Verified At:</span> ${new Date(result.qr_data.verified_at).toLocaleString()}</p>` : ''}
+                html += `<div class="mt-3 p-3 bg-base-100 rounded-lg border border-base-200">
+                    <p class="text-xs font-semibold text-base-content/70 mb-2">📋 QR CODE DETAILS:</p>
+                    <div class="space-y-2 text-sm">
+                        <div class="grid grid-cols-2 gap-2">
+                            <span class="font-medium text-base-content/60">QR UUID:</span>
+                            <code class="text-xs font-mono break-all">${result.qr_data.qr_uuid}</code>
+                            <span class="font-medium text-base-content/60">Item:</span>
+                            <span class="font-semibold">${result.qr_data.item}</span>
+                            <span class="font-medium text-base-content/60">Part Name:</span>
+                            <span>${result.qr_data.part.name}</span>
+                            <span class="font-medium text-base-content/60">Maker:</span>
+                            <span>${result.qr_data.part.maker}</span>
+                            <span class="font-medium text-base-content/60">Lot No:</span>
+                            <span class="font-mono">${result.qr_data.lot_no}</span>
                         </div>
+                        ${result.qr_data.verified_at ? `<div class="mt-2 pt-2 border-t border-base-200"><span class="font-medium text-base-content/60">Verified At:</span> <span class="text-sm">${new Date(result.qr_data.verified_at).toLocaleString()}</span></div>` : ''}
                     </div>
-                `;
+                </div>`;
             }
             
-            // Add mismatches if any
             if (result.mismatches && result.mismatches.length > 0) {
-                html += `
-                    <div class="mt-3 p-3 bg-error/10 rounded-lg border border-error/20">
-                        <p class="text-xs font-semibold text-error mb-2">MISMATCHES FOUND:</p>
-                        <ul class="list-disc list-inside text-sm space-y-1">
-                            ${result.mismatches.map(m => `<li class="text-error/80">${m}</li>`).join('')}
-                        </ul>
-                    </div>
-                `;
+                html += `<div class="mt-3 p-3 bg-error/10 rounded-lg border border-error/20">
+                    <p class="text-xs font-semibold text-error mb-2">⚠️ MISMATCHES FOUND:</p>
+                    <ul class="list-disc list-inside text-sm space-y-1">
+                        ${result.mismatches.map(m => `<li class="text-error/80">${m}</li>`).join('')}
+                    </ul>
+                </div>`;
             }
             
             verificationResultDiv.innerHTML = html;
-            
-            // Auto scroll to result
             verificationResultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         
-        // QR Scanner Success Callback
         async function onQRCodeScanned(decodedText) {
-            if (isProcessing) return;
+            addDebugLog(`🔍 QR Code detected!`, 'info');
+            
+            if (isProcessing) {
+                addDebugLog(`⚠️ Already processing, skipping...`, 'warning');
+                return;
+            }
             isProcessing = true;
             
             // Stop scanning immediately
@@ -552,38 +530,33 @@
                 try {
                     await html5QrCode.stop();
                     isScanning = false;
+                    addDebugLog(`Scanner stopped after detection`, 'info');
                 } catch (err) {
-                    console.warn("Error stopping scanner:", err);
+                    addDebugLog(`Error stopping scanner: ${err.message}`, 'error');
                 }
             }
             
-            // Show scanning status
             scanStatusDiv.classList.remove("hidden");
-            scanStatusDiv.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i><span>Verifying QR code...</span>';
+            scanStatusDiv.innerHTML = '<div class="loading-spinner mr-2"></div><span>Verifying QR code...</span>';
             
-            // Call verification endpoint
-            const verificationResult = await verifyQRCode(decodedText);
+            const verificationResult = await verifyDirectQRScan(decodedText);
             
-            // Hide scanning status
             scanStatusDiv.classList.add("hidden");
-            
-            // Display result
             displayVerificationResult(verificationResult);
             
             isProcessing = false;
         }
         
         async function startQrScanner() {
+            addDebugLog(`Starting QR scanner...`, 'info');
+            
             if (html5QrCode && isScanning) {
                 try {
                     await html5QrCode.stop();
-                } catch (err) {
-                    console.warn("Error stopping previous scanner:", err);
-                }
+                } catch (err) {}
                 isScanning = false;
             }
             
-            // Clear previous results
             verificationResultDiv.classList.add("hidden");
             verificationResultDiv.innerHTML = "";
             scanStatusDiv.classList.add("hidden");
@@ -591,95 +564,80 @@
             
             const readerElement = document.getElementById(qrReaderElementId);
             if (readerElement) {
-                while (readerElement.firstChild) {
-                    readerElement.removeChild(readerElement.firstChild);
-                }
+                while (readerElement.firstChild) readerElement.removeChild(readerElement.firstChild);
             }
             
             html5QrCode = new Html5Qrcode(qrReaderElementId);
+            addDebugLog(`Html5Qrcode instance created`, 'info');
             
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0,
-                showTorchButtonIfSupported: true,
-                showZoomSliderIfSupported: true,
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 }, 
+                aspectRatio: 1.0, 
+                showTorchButtonIfSupported: true, 
+                showZoomSliderIfSupported: true 
             };
             
             try {
                 await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    onQRCodeScanned,
+                    { facingMode: "environment" }, 
+                    config, 
+                    onQRCodeScanned, 
                     (errorMessage) => {
-                        // Silent error handling for non-critical errors
-                        if (errorMessage && !errorMessage.includes("No MultiFormat Readers")) {
-                            console.debug("QR Scan debug:", errorMessage);
+                        if (errorMessage && !errorMessage.includes("No MultiFormat Readers") && !errorMessage.includes("NotFound")) {
+                            // Only log critical errors
+                            if (errorMessage.includes("Camera")) {
+                                addDebugLog(`Camera error: ${errorMessage}`, 'error');
+                            }
                         }
                     }
                 );
                 isScanning = true;
-                console.log("QR Scanner started successfully");
-                
-                // Enable/disable buttons
-                const restartBtn = document.getElementById("restartScannerBtn");
-                const stopBtn = document.getElementById("stopScannerBtn");
-                if (restartBtn) restartBtn.disabled = false;
-                if (stopBtn) stopBtn.disabled = false;
-                
+                addDebugLog(`✅ QR Scanner started successfully!`, 'success');
+                document.getElementById("restartScannerBtn").disabled = false;
+                document.getElementById("stopScannerBtn").disabled = false;
             } catch (err) {
-                console.error("Failed to start QR scanner:", err);
+                addDebugLog(`❌ Failed to start QR scanner: ${err.message}`, 'error');
                 verificationResultDiv.classList.remove("hidden");
-                verificationResultDiv.innerHTML = `
-                    <div class="alert alert-error shadow-lg">
-                        <div>
-                            <span class="text-2xl">❌</span>
-                            <div>
-                                <h3 class="font-bold">Camera Error</h3>
-                                <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                verificationResultDiv.innerHTML = `<div class="alert alert-error shadow-lg"><div><span class="text-2xl">❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p><p class="text-xs mt-2">Please ensure camera permissions are granted and you're using HTTPS/localhost.</p></div></div></div>`;
                 isScanning = false;
             }
         }
         
         async function stopQrScanner() {
+            addDebugLog(`Stopping QR scanner...`, 'info');
             if (html5QrCode && isScanning) {
                 try {
                     await html5QrCode.stop();
                     isScanning = false;
+                    addDebugLog(`✅ Scanner stopped`, 'success');
                     const readerElement = document.getElementById(qrReaderElementId);
                     if (readerElement) {
-                        while (readerElement.firstChild) {
-                            readerElement.removeChild(readerElement.firstChild);
-                        }
+                        while (readerElement.firstChild) readerElement.removeChild(readerElement.firstChild);
                     }
                 } catch (err) {
-                    console.error("Error stopping scanner:", err);
+                    addDebugLog(`Error stopping scanner: ${err.message}`, 'error');
                 }
             }
         }
         
         async function restartScanner() {
+            addDebugLog(`Restarting scanner...`, 'info');
             await stopQrScanner();
-            setTimeout(() => {
-                startQrScanner();
-            }, 100);
+            setTimeout(() => startQrScanner(), 100);
         }
         
         function openQRModal() {
+            addDebugLog(`Opening QR scanner modal`, 'info');
             const qrModal = document.getElementById("qrScannerModal");
             if (qrModal) {
                 qrModal.showModal();
-                setTimeout(() => {
-                    startQrScanner();
-                }, 200);
+                setTimeout(() => startQrScanner(), 200);
             }
         }
         
         function closeQRModal() {
+            addDebugLog(`Closing QR scanner modal`, 'info');
             const qrModal = document.getElementById("qrScannerModal");
             if (qrModal) {
                 stopQrScanner();
@@ -687,284 +645,54 @@
             }
         }
         
-        // Attach QR Verify link handler
-        const qrVerifyLink = document.getElementById("qrVerifyLink");
-        if (qrVerifyLink) {
-            qrVerifyLink.addEventListener("click", (e) => {
-                e.preventDefault();
-                openQRModal();
-            });
+        // Event Listeners
+        document.getElementById("qrVerifyLink")?.addEventListener("click", (e) => { e.preventDefault(); openQRModal(); });
+        document.getElementById("restartScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) restartScanner(); });
+        document.getElementById("stopScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) stopQrScanner(); });
+        document.getElementById("qrScannerModal")?.addEventListener("close", () => { stopQrScanner(); verificationResultDiv.classList.add("hidden"); verificationResultDiv.innerHTML = ""; scanStatusDiv.classList.add("hidden"); isProcessing = false; });
+        
+        function toggleSidebar() { 
+            const sidebar = document.getElementById('sidebar'); 
+            const overlay = document.getElementById('overlay'); 
+            if (window.innerWidth < 1024) { 
+                if (sidebar.classList.contains('-translate-x-full')) { 
+                    sidebar.classList.remove('-translate-x-full'); 
+                    overlay.classList.remove('hidden'); 
+                } else { 
+                    sidebar.classList.add('-translate-x-full'); 
+                    overlay.classList.add('hidden'); 
+                } 
+            } 
         }
         
-        // QR Modal event listeners
-        const qrModal = document.getElementById("qrScannerModal");
-        if (qrModal) {
-            qrModal.addEventListener("close", () => {
-                stopQrScanner();
-                verificationResultDiv.classList.add("hidden");
-                verificationResultDiv.innerHTML = "";
-                scanStatusDiv.classList.add("hidden");
-                isProcessing = false;
-            });
+        function closeSidebar() { 
+            const sidebar = document.getElementById('sidebar'); 
+            const overlay = document.getElementById('overlay'); 
+            if (window.innerWidth < 1024) { 
+                sidebar.classList.add('-translate-x-full'); 
+                overlay.classList.add('hidden'); 
+            } 
         }
         
-        const restartBtn = document.getElementById("restartScannerBtn");
-        if (restartBtn) {
-            restartBtn.addEventListener("click", () => {
-                if (qrModal && qrModal.open) {
-                    restartScanner();
-                }
-            });
-        }
-        
-        const stopBtn = document.getElementById("stopScannerBtn");
-        if (stopBtn) {
-            stopBtn.addEventListener("click", () => {
-                if (qrModal && qrModal.open) {
-                    stopQrScanner();
-                }
-            });
-        }
-
-        // Worker Management Functions (existing code)
-        function getRoleBadgeColor(role) {
-            switch(role?.toLowerCase()) {
-                case 'admin':
-                    return 'badge-secondary';
-                case 'user':
-                    return 'badge-success';
-                default:
-                    return 'badge-ghost';
-            }
-        }
-
-        async function fetchAllWorkers() {
-            const tableBody = document.getElementById("workersTableBody");
-            const workersStatus = document.getElementById("workersStatus");
-            const workersCount = document.getElementById("workersCount");
-            const totalWorkers = document.getElementById("totalWorkers");
-            const adminCount = document.getElementById("adminCount");
-            const userCount = document.getElementById("userCount");
-            const sidebarUserCount = document.getElementById("sidebarUserCount");
-            const sidebarAdminCount = document.getElementById("sidebarAdminCount");
-
-            try {
-                tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Loading workers...</p></td></tr>';
-                
-                const endpoints = [
-                    '/workers/',
-                    '/api/workers/',
-                    'http://localhost:8000/workers/',
-                    'http://127.0.0.1:8000/workers/'
-                ];
-                
-                let response = null;
-                let data = null;
-                
-                for (const endpoint of endpoints) {
-                    try {
-                        const res = await fetch(endpoint);
-                        if (res.ok) {
-                            response = res;
-                            data = await res.json();
-                            break;
-                        }
-                    } catch (e) {
-                        console.log(`Endpoint ${endpoint} failed, trying next...`);
-                        continue;
-                    }
-                }
-                
-                if (!response || !data) {
-                    throw new Error('Could not connect to any endpoint');
-                }
-
-                if (data.workers && data.workers.length > 0) {
-                    tableBody.innerHTML = '';
-                    let adminTotal = 0;
-                    let userTotal = 0;
-                    
-                    data.workers.forEach(worker => {
-                        const row = document.createElement('tr');
-                        row.className = 'hover:bg-base-200/50 transition-all duration-200';
-                        
-                        if (worker.role?.toLowerCase() === 'admin') {
-                            adminTotal++;
-                        } else if (worker.role?.toLowerCase() === 'user') {
-                            userTotal++;
-                        }
-                        
-                        row.innerHTML = `
-                            <td class="font-medium">${worker.first_name || ''}</td>
-                            <td class="font-medium">${worker.last_name || ''}</td>
-                            <td>
-                                <span class="badge badge-soft ${getRoleBadgeColor(worker.role)}">
-                                    ${worker.role || 'User'}
-                                </span>
-                            </td>
-                        `;
-                        tableBody.appendChild(row);
-                    });
-                    
-                    const total = data.count || data.workers.length;
-                    workersCount.textContent = `Total: ${total} workers`;
-                    totalWorkers.textContent = total;
-                    adminCount.textContent = adminTotal;
-                    userCount.textContent = userTotal;
-                    sidebarUserCount.textContent = userTotal;
-                    sidebarAdminCount.textContent = adminTotal;
-                    workersStatus.textContent = "";
-                } else {
-                    tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-base-content/50"><i class="fas fa-users text-4xl mb-2 opacity-30"></i><p>No workers found</p></td></tr>';
-                    workersCount.textContent = "";
-                    totalWorkers.textContent = "0";
-                    adminCount.textContent = "0";
-                    userCount.textContent = "0";
-                    sidebarUserCount.textContent = "0";
-                    sidebarAdminCount.textContent = "0";
-                }
-                
-            } catch (error) {
-                console.error("Error fetching workers:", error);
-                tableBody.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-error"><i class="fas fa-exclamation-circle text-2xl mb-2"></i><p>Error loading workers</p></td></tr>';
-                workersStatus.textContent = "Error: " + error.message;
-                workersStatus.className = "text-center font-bold text-lg mt-4 text-error";
-                workersCount.textContent = "";
-            }
-        }
-
-        document.getElementById("workerForm")?.addEventListener("submit", async (event) => {
-            event.preventDefault();
-
-            const data = {
-                first_name: document.getElementById("first_name").value,
-                last_name: document.getElementById("last_name").value,
-                employee_id: document.getElementById("employee_id").value,
-                username: document.getElementById("username").value,
-                role: document.getElementById("role").value,
-            };
-
-            const modalStatus = document.getElementById("modalStatus");
-            
-            try {
-                const endpoints = [
-                    '/api/worker',
-                    '/worker',
-                    'http://localhost:8000/api/worker',
-                    'http://127.0.0.1:8000/api/worker'
-                ];
-                
-                let success = false;
-                
-                for (const endpoint of endpoints) {
-                    try {
-                        const response = await fetch(endpoint, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                            },
-                            body: JSON.stringify(data),
-                        });
-                        
-                        if (response.ok || response.status === 201 || response.status === 409) {
-                            const result = await response.json();
-                            
-                            if (response.status === 201) {
-                                modalStatus.textContent = result.message || "Worker created successfully!";
-                                modalStatus.className = "text-center font-bold text-sm mt-2 text-success";
-                                success = true;
-                            } else if (response.status === 409) {
-                                modalStatus.textContent = "Worker already exists";
-                                modalStatus.className = "text-center font-bold text-sm mt-2 text-warning";
-                                success = true;
-                            }
-                            
-                            if (success) {
-                                fetchAllWorkers();
-                                setTimeout(() => {
-                                    document.getElementById("workerForm").reset();
-                                    modalStatus.textContent = "";
-                                    closeUserModal();
-                                }, 1000);
-                                break;
-                            }
-                        }
-                    } catch (e) {
-                        console.log(`POST failed for ${endpoint}:`, e);
-                        continue;
-                    }
-                }
-                
-                if (!success) {
-                    modalStatus.textContent = "Failed to create worker. Please try again.";
-                    modalStatus.className = "text-center font-bold text-sm mt-2 text-error";
-                }
-                
-            } catch (error) {
-                console.error("Error creating worker:", error);
-                modalStatus.textContent = "Error creating worker";
-                modalStatus.className = "text-center font-bold text-sm mt-2 text-error";
-            }
-        });
-
-        document.getElementById("refreshButton")?.addEventListener("click", fetchAllWorkers);
-        document.addEventListener('DOMContentLoaded', fetchAllWorkers);
-
-        // Sidebar functions
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('overlay');
-            
-            if (window.innerWidth < 1024) {
-                if (sidebar.classList.contains('-translate-x-full')) {
-                    sidebar.classList.remove('-translate-x-full');
-                    overlay.classList.remove('hidden');
-                } else {
-                    sidebar.classList.add('-translate-x-full');
-                    overlay.classList.add('hidden');
-                }
-            }
-        }
-
-        function closeSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('overlay');
-            
-            if (window.innerWidth < 1024) {
-                sidebar.classList.add('-translate-x-full');
-                overlay.classList.add('hidden');
-            }
-        }
-
         document.getElementById('menuBtn')?.addEventListener('click', toggleSidebar);
-
-        window.addEventListener('resize', function() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('overlay');
-            
-            if (window.innerWidth >= 1024) {
-                sidebar.classList.remove('-translate-x-full');
-                overlay.classList.add('hidden');
-            } else {
-                sidebar.classList.add('-translate-x-full');
-                overlay.classList.add('hidden');
-            }
+        window.addEventListener('resize', () => { 
+            const sidebar = document.getElementById('sidebar'); 
+            const overlay = document.getElementById('overlay'); 
+            if (window.innerWidth >= 1024) { 
+                sidebar.classList.remove('-translate-x-full'); 
+                overlay.classList.add('hidden'); 
+            } else { 
+                sidebar.classList.add('-translate-x-full'); 
+                overlay.classList.add('hidden'); 
+            } 
         });
-
-        function openUserModal() {
-            document.getElementById('userModal').showModal();
-        }
-
-        function closeUserModal() {
-            document.getElementById('userModal').close();
-        }
-
-        window.onclick = function(event) {
-            const modal = document.getElementById('userModal');
-            if (event.target === modal) {
-                modal.close();
-            }
-        }
+        
+        addDebugLog(`QR Verification System Ready`, 'success');
+        addDebugLog(`Will try these API endpoints:`, 'info');
+        API_ENDPOINTS.forEach((endpoint, i) => {
+            addDebugLog(`  ${i+1}. ${window.location.origin}${endpoint}`, 'info');
+        });
+        addDebugLog(`Expected QR format: {"qr_uuid": "...", "item": "...", "part": {"name": "...", "maker": "..."}, "lot_no": "..."}`, 'info');
     </script>
 </body>
 </html>

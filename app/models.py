@@ -142,7 +142,16 @@ class QRCode(models.Model):
         if self.status:
             data["status"] = self.status
         
-        return data
+        return {
+            "qr_uuid": str(self.qr_uuid),
+            "item": self.item_name,
+            "part": {
+                "name": self.part_name,
+                "maker": self.part_maker
+            },
+            "lot_no": self.lot_no,
+            "status": self.status
+        }
 
 
     

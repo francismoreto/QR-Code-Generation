@@ -4,7 +4,7 @@ from django.core.serializers import serialize
 import json
 from ninja import NinjaAPI
 from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode
-from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema
+from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, DirectQRScanSchema
 import csv
 import os
 import io
@@ -1094,37 +1094,30 @@ def verify_data(request, data: DataVerificationSchema):
 
 # ==================== VERIFICATION STEP 2: Verify QR Scan (FIXED) ====================
 
-@api.post("/verify/scan",tags=["QR VERIFY"])
-def verify_qr_scan(request, data: QRScanVerificationSchema):
+@api.post("/verify/direct-scan", tags=["QR VERIFY"])
+def verify_direct_qr_scan(request, data: DirectQRScanSchema):
     """
-    SECOND VERIFICATION STEP: Verify the scanned QR code matches the data.
-    This determines if the physical item is GOOD or NO_GOOD.
+    DIRECT QR SCAN VERIFICATION: Verify the scanned QR code directly.
+    The QR code should contain the UUID, item, part, and lot_no.
     
-    Request body (MUST follow this structure):
+    Request body (direct from QR scan):
     {
-        "qr_uuid": "550e8400-e29b-41d4-a716-446655440000",
-        "scanned_data": {
-            "item": "Laptop",
-            "part": {"name": "CPU", "maker": "Intel"},
-            "lot_no": "LOT-2024-001"
-        }
+        "qr_uuid": "1c5323bc-28f6-465a-a968-8487947d1eb4",
+        "item": "LN6878001",
+        "part": {"name": "PHR-2 WHITE", "maker": "JST"},
+        "lot_no": "564",
+        "status": null
     }
     """
     try:
-        # Get the QR record from database
+        # Get the QR record from database using UUID from scanned data
         qr_record = QRCode.objects.get(qr_uuid=data.qr_uuid)
         
-        # Extract scanned data - using dot notation with validated schema
-        scanned_item = data.scanned_data.item
-        scanned_part_name = data.scanned_data.part.name
-        scanned_part_maker = data.scanned_data.part.maker
-        scanned_lot = data.scanned_data.lot_no
-        
         # Compare database data with scanned data
-        item_match = (qr_record.item_name == scanned_item)
-        part_match = (qr_record.part_name == scanned_part_name)
-        maker_match = (qr_record.part_maker == scanned_part_maker)
-        lot_match = (qr_record.lot_no == scanned_lot)
+        item_match = (qr_record.item_name == data.item)
+        part_match = (qr_record.part_name == data.part.name)
+        maker_match = (qr_record.part_maker == data.part.maker)
+        lot_match = (qr_record.lot_no == data.lot_no)
         
         # Determine if GOOD or NO_GOOD
         is_good = item_match and part_match and maker_match and lot_match
@@ -1157,13 +1150,13 @@ def verify_qr_scan(request, data: QRScanVerificationSchema):
             # Build mismatch details
             mismatches = []
             if not item_match:
-                mismatches.append(f"Item (DB: {qr_record.item_name}, Scanned: {scanned_item})")
+                mismatches.append(f"Item (DB: {qr_record.item_name}, Scanned: {data.item})")
             if not part_match:
-                mismatches.append(f"Part name (DB: {qr_record.part_name}, Scanned: {scanned_part_name})")
+                mismatches.append(f"Part name (DB: {qr_record.part_name}, Scanned: {data.part.name})")
             if not maker_match:
-                mismatches.append(f"Maker (DB: {qr_record.part_maker}, Scanned: {scanned_part_maker})")
+                mismatches.append(f"Maker (DB: {qr_record.part_maker}, Scanned: {data.part.maker})")
             if not lot_match:
-                mismatches.append(f"Lot No (DB: {qr_record.lot_no}, Scanned: {scanned_lot})")
+                mismatches.append(f"Lot No (DB: {qr_record.lot_no}, Scanned: {data.lot_no})")
             
             response_data["message"] = f"❌ VERIFICATION FAILED: The scanned QR code does not match the database. Item is NO GOOD. Mismatches: {', '.join(mismatches)}"
             response_data["mismatches"] = mismatches
@@ -1183,10 +1176,8 @@ def verify_qr_scan(request, data: QRScanVerificationSchema):
             "message": f"Error during verification: {str(e)}"
         }, status=500)
 
-
 # ==================== QR GENERATION ENDPOINT ====================
-
-@api.post("/qr/generate", tags=["QR GENERATE"])
+@api.post("/qr/generate")
 def generate_qr_code(request, data: QRCreateSchema):
     """
     Generate a NEW QR code ONLY if it doesn't already exist.
@@ -1198,6 +1189,15 @@ def generate_qr_code(request, data: QRCreateSchema):
         "part_name": "CPU",
         "part_maker": "Intel",
         "lot_no": "LOT-2024-001"
+    }
+    
+    QR Code will contain:
+    {
+        "qr_uuid": "550e8400-e29b-41d4-a716-446655440000",
+        "item": "Laptop",
+        "part": {"name": "CPU", "maker": "Intel"},
+        "lot_no": "LOT-2024-001",
+        "status": "PENDING"
     }
     """
     try:
@@ -1245,8 +1245,17 @@ def generate_qr_code(request, data: QRCreateSchema):
                 created_by=None
             )
             
-            # Generate QR data
-            qr_data = qr_record.generate_qr_data()
+            # Generate QR data INCLUDING qr_uuid
+            qr_data = {
+                "qr_uuid": str(qr_record.qr_uuid),
+                "item": qr_record.item_name,
+                "part": {
+                    "name": qr_record.part_name,
+                    "maker": qr_record.part_maker
+                },
+                "lot_no": qr_record.lot_no,
+                "status": qr_record.status
+            }
             data_string = json.dumps(qr_data)
             
             # Generate QR code image
@@ -1272,8 +1281,10 @@ def generate_qr_code(request, data: QRCreateSchema):
                 "qr_record": {
                     "qr_uuid": str(qr_record.qr_uuid),
                     "item": qr_record.item_name,
-                    "part": qr_record.part_name,
-                    "maker": qr_record.part_maker,
+                    "part": {
+                        "name": qr_record.part_name,
+                        "maker": qr_record.part_maker
+                    },
                     "lot_no": qr_record.lot_no,
                     "status": qr_record.status,
                     "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
