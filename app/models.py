@@ -134,6 +134,7 @@ class QRCode(models.Model):
         data = {
             "item": self.item_name,
             "part": self.part_name,
+            "maker": self.part_maker,
             "lot": self.lot_no,
         }
         

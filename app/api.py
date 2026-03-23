@@ -215,7 +215,7 @@ def create_product(request, data: ProductSchema):
             "product_family": data.product_family
         })
     
-@api.post("/customers", tags=['SAMPLE'])
+@api.post("/customers", tags=['Customer/Items/Partname'])
 def create_customer(request, data: CustomerSchema):
     # Check if customer with same name already exists FIRST
     if Customer.objects.filter(customer_name=data.customer_name).exists():
@@ -271,7 +271,7 @@ def create_customer(request, data: CustomerSchema):
             "error": f"Database integrity error: {str(e)}"
         }, status=400)
     
-@api.patch("/customers/{customer_name}/items/add-item")
+@api.patch("/customers/{customer_name}/items/add-item",tags=['Customer/Items/Partname'])
 def append_customer_item(request, customer_name: str, data: AppendItemSchema):
     """
     Append a single new item to a customer.
@@ -336,7 +336,7 @@ def append_customer_item(request, customer_name: str, data: AppendItemSchema):
             "details": str(e)
         }, status=500)
 
-@api.patch("/customers/{customer_name}/items/{item_name}/parts/add")
+@api.patch("/customers/{customer_name}/items/{item_name}/parts/add",tags=['Customer/Items/Partname'])
 def append_item_parts(request, customer_name: str, item_name: str, data: List[PartnameSchema]):
     """
     Append new parts to an existing item.
@@ -577,7 +577,7 @@ def create_output(request, data: WorkerOutputSchema):
         return JsonResponse({"message": f"An error occurred: {str(e)}"})
 
 
-@api.get("/customers/{customer_name}", tags=['SAMPLE'])
+@api.get("/customers/{customer_name}", tags=['Customer/Items/Partname'])
 def get_customer_by_name(request, customer_name: str):
     try:
         # Use filter() instead of get() to handle multiple customers
@@ -643,7 +643,7 @@ def get_customer_by_name(request, customer_name: str):
 
 
 # Get a specific item by its name
-@api.get("/items/{item_name}", tags=['SAMPLE'])
+@api.get("/items/{item_name}", tags=['Customer/Items/Partname'])
 def get_item_by_name(request, item_name: str):
     # Optional customer filter
     customer_name = request.GET.get('customer_name')
@@ -739,7 +739,7 @@ def get_item_by_name(request, item_name: str):
 
 
 # Get all items
-@api.get("/items", tags=['SAMPLE'])
+@api.get("/items", tags=['Customer/Items/Partname'])
 def get_all_items(request):
     customer_name = request.GET.get('customer_name')
     
@@ -785,7 +785,7 @@ def get_all_items(request):
 
 
 # Get all partnames for a specific item
-@api.get("/items/{item_name}/partnames", tags=['SAMPLE'])
+@api.get("/items/{item_name}/partnames", tags=['Customer/Items/Partname'])
 def get_item_partnames(request, item_name: str):
     customer_name = request.GET.get('customer_name')
     
@@ -871,7 +871,7 @@ def get_item_partnames(request, item_name: str):
 
 
 # Get a specific partname
-@api.get("/partnames/{part_name}", tags=['SAMPLE'])
+@api.get("/partnames/{part_name}", tags=['Customer/Items/Partname'])
 def get_partname_by_name(request, part_name: str):
     # Optional filters
     item_name = request.GET.get('item_name')
@@ -936,7 +936,7 @@ def get_partname_by_name(request, part_name: str):
 
 
 # Get all partnames (with optional filters)
-@api.get("/partnames", tags=['SAMPLE'])
+@api.get("/partnames", tags=['Customer/Items/Partname'])
 def get_all_partnames(request):
     # Optional filters
     item_name = request.GET.get('item_name')
@@ -1038,75 +1038,13 @@ def get_worker(request, employeeid:str):
 
 
 
-@api.get("/qr/selection/customers", response=List[CustomerSelectionSchema])
-def get_customers_for_selection(request):
+# ==================== VERIFICATION STEP 1: Verify Data Exists ====================
+
+@api.post("/verify/data", tags=["QR VERIFY"])
+def verify_data(request, data: DataVerificationSchema):
     """
-    Get all customers with their items and parts for QR selection.
-    This populates the dropdowns in the frontend.
-    """
-    customers = Customer.objects.prefetch_related('items__partnames').all()
-    
-    result = []
-    for customer in customers:
-        items = []
-        for item in customer.items.all():
-            parts = []
-            for part in item.partnames.all():
-                parts.append({
-                    "part_name": part.part_name,
-                    "maker": part.maker
-                })
-            
-            items.append({
-                "item": item.item,
-                "partnames": parts
-            })
-        
-        result.append({
-            "customer_name": customer.customer_name,
-            "items": items
-        })
-    
-    return result
-
-
-@api.get("/qr/selection/items/{customer_name}")
-def get_items_for_customer(request, customer_name: str):
-    """Get items for a specific customer (cascading dropdown)"""
-    try:
-        customer = Customer.objects.get(customer_name=customer_name)
-        items = customer.items.prefetch_related('partnames').all()
-        
-        result = []
-        for item in items:
-            parts = []
-            for part in item.partnames.all():
-                parts.append({
-                    "part_name": part.part_name,
-                    "maker": part.maker
-                })
-            
-            result.append({
-                "item": item.item,
-                "partnames": parts
-            })
-        
-        return JsonResponse({
-            "customer_name": customer_name,
-            "items": result
-        })
-        
-    except Customer.DoesNotExist:
-        return JsonResponse({"error": "Customer not found"}, status=404)
-
-
-# ==================== QR GENERATION ENDPOINT ====================
-
-@api.post("/qr/generate")
-def generate_qr_code(request, data: QRCreateSchema):
-    """
-    Generate a NEW QR code ONLY if it doesn't already exist.
-    Will NOT create duplicate QR codes - returns 409 Conflict if exists.
+    FIRST VERIFICATION STEP: Check if the data exists in the database.
+    This is the initial verification before QR code generation.
     
     Request body:
     {
@@ -1114,309 +1052,55 @@ def generate_qr_code(request, data: QRCreateSchema):
         "part_name": "CPU",
         "part_maker": "Intel",
         "lot_no": "LOT-2024-001"
-        # created_by removed - no longer needed
     }
-    
-    Returns:
-    - 201: New QR code created successfully
-    - 404: Item or part not found in masterlist
-    - 409: QR code already exists (NO new QR created)
     """
     try:
-        # Verify the item exists in masterlist
-        items = Item.objects.filter(item=data.item_name)
-        if not items.exists():
-            return JsonResponse({
-                "error": f"Item '{data.item_name}' not found in masterlist"
-            }, status=404)
-        
-        # Verify the specific part exists for this item
-        parts = Partname.objects.filter(
-            item__item=data.item_name,
-            part_name=data.part_name,
-            maker=data.part_maker
-        )
-        
-        if not parts.exists():
-            return JsonResponse({
-                "error": f"Part '{data.part_name}' with maker '{data.part_maker}' not found for item '{data.item_name}'"
-            }, status=404)
-        
-        # Check if QR code already exists
-        # If exists, return 409 Conflict and DO NOT create new one
-        existing_qr = QRCode.objects.filter(
+        # Check if the data combination exists
+        qr_record = QRCode.objects.filter(
             item_name=data.item_name,
             part_name=data.part_name,
             part_maker=data.part_maker,
             lot_no=data.lot_no
-        ).exists()
-        
-        if existing_qr:
-            return JsonResponse({
-                "error": "QR code already exists for this combination",
-                "message": "Cannot create duplicate QR code. Use GET /qr/get to retrieve the existing QR code.",
-                "details": {
-                    "item_name": data.item_name,
-                    "part_name": data.part_name,
-                    "part_maker": data.part_maker,
-                    "lot_no": data.lot_no
-                },
-                "retrieval_endpoint": f"/qr/get?item_name={data.item_name}&part_name={data.part_name}&part_maker={data.part_maker}&lot_no={data.lot_no}"
-            }, status=409)
-        
-        # ONLY create new QR if no existing one found
-        with transaction.atomic():
-            # Create QR record with created_by as None or empty
-            qr_record = QRCode.objects.create(
-                item_name=data.item_name,
-                part_name=data.part_name,
-                part_maker=data.part_maker,
-                lot_no=data.lot_no,
-                created_by=None  # Set to None since we removed it from request
-            )
-            
-            # Generate QR data
-            qr_data = qr_record.generate_qr_data()
-            data_string = json.dumps(qr_data)
-            
-            # Generate QR code image
-            qr = qrcode.QRCode(
-                version=1,
-                box_size=10,
-                border=2,
-                error_correction=qrcode.constants.ERROR_CORRECT_H
-            )
-            qr.add_data(data_string)
-            qr.make(fit=True)
-            
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            # Save image to model
-            buffer = BytesIO()
-            img.save(buffer, format='PNG')
-            filename = f"qr_{qr_record.qr_uuid}.png"
-            qr_record.qr_image.save(filename, ContentFile(buffer.getvalue()), save=True)
-            
-            return JsonResponse({
-                "message": "QR code generated successfully",
-                "qr_record": {
-                    "qr_uuid": str(qr_record.qr_uuid),
-                    "item": qr_record.item_name,
-                    "part": qr_record.part_name,
-                    "maker": qr_record.part_maker,
-                    "lot_no": qr_record.lot_no,
-                    "status": qr_record.status,
-                    "verified_at": None,
-                    "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
-                    "qr_data": qr_data,
-                    "created_at": qr_record.created_at.isoformat()
-                    # created_by removed from response as well
-                }
-            }, status=201)
-            
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-@api.get("/qr/get")
-def get_qr_code(request):
-    """
-    Get an existing QR code by combination or UUID.
-    
-    Query parameters (provide either combination OR uuid):
-    - By combination:
-        ?item_name=Laptop&part_name=CPU&part_maker=Intel&lot_no=LOT-2024-001
-    - By UUID:
-        ?uuid=123e4567-e89b-12d3-a456-426614174000
-    
-    Returns:
-    - 200: QR code found
-    - 400: Missing parameters
-    - 404: QR code not found
-    """
-    try:
-        # Check if searching by UUID
-        uuid_param = request.GET.get('uuid')
-        if uuid_param:
-            try:
-                qr_record = QRCode.objects.get(qr_uuid=uuid_param)
-            except QRCode.DoesNotExist:
-                return JsonResponse({
-                    "error": f"QR code with UUID '{uuid_param}' not found"
-                }, status=404)
-            
-            qr_data = qr_record.generate_qr_data()
-            return JsonResponse({
-                "qr_record": {
-                    "qr_uuid": str(qr_record.qr_uuid),
-                    "item": qr_record.item_name,
-                    "part": qr_record.part_name,
-                    "maker": qr_record.part_maker,
-                    "lot_no": qr_record.lot_no,
-                    "status": qr_record.status,
-                    "verified_at": qr_record.verified_at.isoformat() if qr_record.verified_at else None,
-                    "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
-                    "qr_data": qr_data,
-                    "created_at": qr_record.created_at.isoformat()
-                    # created_by removed
-                }
-            }, status=200)
-        
-        # Check if searching by combination
-        item_name = request.GET.get('item_name')
-        part_name = request.GET.get('part_name')
-        part_maker = request.GET.get('part_maker')
-        lot_no = request.GET.get('lot_no')
-        
-        # Validate that either UUID or all combination fields are provided
-        if not all([item_name, part_name, part_maker, lot_no]):
-            return JsonResponse({
-                "error": "Missing parameters",
-                "message": "Provide either 'uuid' OR all of: 'item_name', 'part_name', 'part_maker', 'lot_no'"
-            }, status=400)
-        
-        # Find QR by combination
-        qr_record = QRCode.objects.filter(
-            item_name=item_name,
-            part_name=part_name,
-            part_maker=part_maker,
-            lot_no=lot_no
         ).first()
         
-        if not qr_record:
-            return JsonResponse({
-                "error": "QR code not found",
-                "message": f"No QR code found for {item_name} - {part_name} ({part_maker}) with lot {lot_no}"
-            }, status=404)
-        
-        qr_data = qr_record.generate_qr_data()
-        return JsonResponse({
-            "qr_record": {
-                "qr_uuid": str(qr_record.qr_uuid),
-                "item": qr_record.item_name,
-                "part": qr_record.part_name,
-                "maker": qr_record.part_maker,
-                "lot_no": qr_record.lot_no,
-                "status": qr_record.status,
-                "verified_at": qr_record.verified_at.isoformat() if qr_record.verified_at else None,
-                "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
-                "qr_data": qr_data,
-                "created_at": qr_record.created_at.isoformat()
-                # created_by removed
+        if qr_record:
+            return {
+                "verified": True,
+                "message": "✅ Data found in database. Proceed to QR scan.",
+                "data": {
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "item": qr_record.item_name,
+                    "part": {
+                        "name": qr_record.part_name,
+                        "maker": qr_record.part_maker
+                    },
+                    "lot_no": qr_record.lot_no
+                }
             }
-        }, status=200)
-        
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-# ==================== VERIFICATION STEP 1: Verify Data Exists ====================
-
-@api.post("/verify/scan")
-def verify_qr_scan(request, data: QRScanVerificationSchema):
-    """
-    Verify the scanned QR code and set status to GOOD or NO_GOOD.
-    
-    Request body:
-    {
-        "qr_uuid": "550e8400-e29b-41d4-a716-446655440000",
-        "scanned_data": {
-            "item": "Laptop",
-            "part": "CPU",
-            "lot": "LOT-2024-001"
-        }
-    }
-    """
-    try:
-        # Get the QR record from database
-        qr_record = QRCode.objects.get(qr_uuid=data.qr_uuid)
-        
-        # Extract scanned data (simpler structure now)
-        scanned_item = data.scanned_data.get('item')
-        scanned_part = data.scanned_data.get('part')
-        scanned_lot = data.scanned_data.get('lot')
-        
-        # Compare database data with scanned data
-        item_match = (qr_record.item_name == scanned_item)
-        part_match = (qr_record.part_name == scanned_part)
-        lot_match = (qr_record.lot_no == scanned_lot)
-        
-        # Determine if GOOD or NO_GOOD
-        is_good = item_match and part_match and lot_match
-        
-        # Update QR record with verification result
-        qr_record.status = QRCode.Status.GOOD if is_good else QRCode.Status.NO_GOOD
-        qr_record.verified_at = timezone.now()
-        qr_record.save()
-        
-        # Regenerate QR code with status included (optional)
-        if qr_record.qr_image:
-            # Generate new QR data with status
-            new_qr_data = qr_record.generate_qr_data()
-            new_data_string = json.dumps(new_qr_data)
-            
-            # Generate new QR code image
-            new_qr = qrcode.QRCode(version=1, box_size=10, border=2)
-            new_qr.add_data(new_data_string)
-            new_qr.make(fit=True)
-            new_img = new_qr.make_image(fill_color="black", back_color="white")
-            
-            # Update image
-            buffer = BytesIO()
-            new_img.save(buffer, format='PNG')
-            filename = f"qr_{qr_record.qr_uuid}_verified.png"
-            qr_record.qr_image.save(filename, ContentFile(buffer.getvalue()), save=True)
-        
-        # Prepare response
-        response_data = {
-            "verified": is_good,
-            "status": qr_record.status,
-            "message": "",
-            "qr_data": {
-                "item": qr_record.item_name,
-                "part": qr_record.part_name,
-                "lot": qr_record.lot_no,
-                "status": qr_record.status
-            }
-        }
-        
-        if is_good:
-            response_data["message"] = "✅ VERIFICATION SUCCESSFUL: Item is GOOD."
         else:
-            # Build mismatch details
-            mismatches = []
-            if not item_match:
-                mismatches.append(f"Item")
-            if not part_match:
-                mismatches.append(f"Part")
-            if not lot_match:
-                mismatches.append(f"Lot")
+            return {
+                "verified": False,
+                "message": "❌ Data not found in database. Cannot generate QR code.",
+                "data": None
+            }
             
-            response_data["message"] = f"❌ VERIFICATION FAILED: Item is NO GOOD. Mismatches: {', '.join(mismatches)}"
-            response_data["mismatches"] = mismatches
-        
-        return JsonResponse(response_data)
-        
-    except QRCode.DoesNotExist:
-        return JsonResponse({
-            "verified": False,
-            "status": "NO_GOOD",
-            "message": "❌ VERIFICATION FAILED: QR code not found in database."
-        }, status=404)
     except Exception as e:
         return JsonResponse({
             "verified": False,
-            "status": "NO_GOOD",
-            "message": f"Error during verification: {str(e)}"
+            "message": f"Error during verification: {str(e)}",
+            "data": None
         }, status=500)
 
-# ==================== VERIFICATION STEP 2: Verify QR Scan ====================
 
-@api.post("/verify/scan")
+# ==================== VERIFICATION STEP 2: Verify QR Scan (FIXED) ====================
+
+@api.post("/verify/scan",tags=["QR VERIFY"])
 def verify_qr_scan(request, data: QRScanVerificationSchema):
     """
     SECOND VERIFICATION STEP: Verify the scanned QR code matches the data.
     This determines if the physical item is GOOD or NO_GOOD.
     
-    Request body:
+    Request body (MUST follow this structure):
     {
         "qr_uuid": "550e8400-e29b-41d4-a716-446655440000",
         "scanned_data": {
@@ -1430,12 +1114,11 @@ def verify_qr_scan(request, data: QRScanVerificationSchema):
         # Get the QR record from database
         qr_record = QRCode.objects.get(qr_uuid=data.qr_uuid)
         
-        # Extract scanned data
-        scanned_item = data.scanned_data.get('item')
-        scanned_part = data.scanned_data.get('part', {})
-        scanned_part_name = scanned_part.get('name')
-        scanned_part_maker = scanned_part.get('maker')
-        scanned_lot = data.scanned_data.get('lot_no')
+        # Extract scanned data - using dot notation with validated schema
+        scanned_item = data.scanned_data.item
+        scanned_part_name = data.scanned_data.part.name
+        scanned_part_maker = data.scanned_data.part.maker
+        scanned_lot = data.scanned_data.lot_no
         
         # Compare database data with scanned data
         item_match = (qr_record.item_name == scanned_item)
@@ -1485,7 +1168,7 @@ def verify_qr_scan(request, data: QRScanVerificationSchema):
             response_data["message"] = f"❌ VERIFICATION FAILED: The scanned QR code does not match the database. Item is NO GOOD. Mismatches: {', '.join(mismatches)}"
             response_data["mismatches"] = mismatches
         
-        return JsonResponse(response_data)
+        return response_data
         
     except QRCode.DoesNotExist:
         return JsonResponse({
@@ -1501,101 +1184,190 @@ def verify_qr_scan(request, data: QRScanVerificationSchema):
         }, status=500)
 
 
-# ==================== COMBINED VERIFICATION ENDPOINT ====================
+# ==================== QR GENERATION ENDPOINT ====================
 
-@api.post("/verify/complete")
-def complete_verification(request, data: dict):
+@api.post("/qr/generate", tags=["QR GENERATE"])
+def generate_qr_code(request, data: QRCreateSchema):
     """
-    Complete verification in one step (if you have both data and scan at once).
+    Generate a NEW QR code ONLY if it doesn't already exist.
+    Will NOT create duplicate QR codes - returns 409 Conflict if exists.
     
     Request body:
     {
         "item_name": "Laptop",
         "part_name": "CPU",
         "part_maker": "Intel",
-        "lot_no": "LOT-2024-001",
-        "scanned_data": {
-            "item": "Laptop",
-            "part": {"name": "CPU", "maker": "Intel"},
-            "lot_no": "LOT-2024-001"
-        }
+        "lot_no": "LOT-2024-001"
     }
     """
     try:
-        # Step 1: Find the QR record
+        # Verify the item exists in masterlist
+        items = Item.objects.filter(item=data.item_name)
+        if not items.exists():
+            return JsonResponse({
+                "error": f"Item '{data.item_name}' not found in masterlist"
+            }, status=404)
+        
+        # Verify the specific part exists for this item
+        parts = Partname.objects.filter(
+            item__item=data.item_name,
+            part_name=data.part_name,
+            maker=data.part_maker
+        )
+        
+        if not parts.exists():
+            return JsonResponse({
+                "error": f"Part '{data.part_name}' with maker '{data.part_maker}' not found for item '{data.item_name}'"
+            }, status=404)
+        
+        # Check if QR code already exists
+        existing_qr = QRCode.objects.filter(
+            item_name=data.item_name,
+            part_name=data.part_name,
+            part_maker=data.part_maker,
+            lot_no=data.lot_no
+        ).exists()
+        
+        if existing_qr:
+            return JsonResponse({
+                "error": "QR code already exists for this combination",
+                "message": "Cannot create duplicate QR code. Use GET /qr/get to retrieve the existing QR code.",
+                "retrieval_endpoint": f"/qr/get?item_name={data.item_name}&part_name={data.part_name}&part_maker={data.part_maker}&lot_no={data.lot_no}"
+            }, status=409)
+        
+        # Create new QR record
+        with transaction.atomic():
+            qr_record = QRCode.objects.create(
+                item_name=data.item_name,
+                part_name=data.part_name,
+                part_maker=data.part_maker,
+                lot_no=data.lot_no,
+                created_by=None
+            )
+            
+            # Generate QR data
+            qr_data = qr_record.generate_qr_data()
+            data_string = json.dumps(qr_data)
+            
+            # Generate QR code image
+            qr = qrcode.QRCode(
+                version=1,
+                box_size=10,
+                border=2,
+                error_correction=qrcode.constants.ERROR_CORRECT_H
+            )
+            qr.add_data(data_string)
+            qr.make(fit=True)
+            
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Save image
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            filename = f"qr_{qr_record.qr_uuid}.png"
+            qr_record.qr_image.save(filename, ContentFile(buffer.getvalue()), save=True)
+            
+            return {
+                "message": "QR code generated successfully",
+                "qr_record": {
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "item": qr_record.item_name,
+                    "part": qr_record.part_name,
+                    "maker": qr_record.part_maker,
+                    "lot_no": qr_record.lot_no,
+                    "status": qr_record.status,
+                    "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
+                    "qr_data": qr_data,
+                    "created_at": qr_record.created_at.isoformat()
+                }
+            }
+            
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+# ==================== QR GET ENDPOINT ====================
+
+@api.get("/qr/get", tags=["QR VERIFY"])
+def get_qr_code(request):
+    """
+    Get an existing QR code by combination or UUID.
+    
+    Query parameters:
+    - By combination: ?item_name=Laptop&part_name=CPU&part_maker=Intel&lot_no=LOT-2024-001
+    - By UUID: ?uuid=123e4567-e89b-12d3-a456-426614174000
+    """
+    try:
+        uuid_param = request.GET.get('uuid')
+        if uuid_param:
+            try:
+                qr_record = QRCode.objects.get(qr_uuid=uuid_param)
+            except QRCode.DoesNotExist:
+                return JsonResponse({"error": f"QR code with UUID '{uuid_param}' not found"}, status=404)
+            
+            qr_data = qr_record.generate_qr_data()
+            return {
+                "qr_record": {
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "item": qr_record.item_name,
+                    "part": qr_record.part_name,
+                    "maker": qr_record.part_maker,
+                    "lot_no": qr_record.lot_no,
+                    "status": qr_record.status,
+                    "verified_at": qr_record.verified_at.isoformat() if qr_record.verified_at else None,
+                    "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
+                    "qr_data": qr_data,
+                    "created_at": qr_record.created_at.isoformat()
+                }
+            }
+        
+        # Search by combination
+        item_name = request.GET.get('item_name')
+        part_name = request.GET.get('part_name')
+        part_maker = request.GET.get('part_maker')
+        lot_no = request.GET.get('lot_no')
+        
+        if not all([item_name, part_name, part_maker, lot_no]):
+            return JsonResponse({
+                "error": "Missing parameters",
+                "message": "Provide either 'uuid' OR all of: 'item_name', 'part_name', 'part_maker', 'lot_no'"
+            }, status=400)
+        
         qr_record = QRCode.objects.filter(
-            item_name=data['item_name'],
-            part_name=data['part_name'],
-            part_maker=data['part_maker'],
-            lot_no=data['lot_no']
+            item_name=item_name,
+            part_name=part_name,
+            part_maker=part_maker,
+            lot_no=lot_no
         ).first()
         
         if not qr_record:
-            return JsonResponse({
-                "verified": False,
-                "status": "NO_GOOD",
-                "message": "❌ VERIFICATION FAILED: No matching QR code found in database."
-            })
+            return JsonResponse({"error": "QR code not found"}, status=404)
         
-        # Step 2: Compare with scanned data
-        scanned = data['scanned_data']
-        scanned_item = scanned.get('item')
-        scanned_part = scanned.get('part', {})
-        scanned_part_name = scanned_part.get('name')
-        scanned_part_maker = scanned_part.get('maker')
-        scanned_lot = scanned.get('lot_no')
-        
-        # Compare
-        item_match = (qr_record.item_name == scanned_item)
-        part_match = (qr_record.part_name == scanned_part_name)
-        maker_match = (qr_record.part_maker == scanned_part_maker)
-        lot_match = (qr_record.lot_no == scanned_lot)
-        
-        is_good = item_match and part_match and maker_match and lot_match
-        
-        # Update QR record
-        qr_record.status = QRCode.Status.GOOD if is_good else QRCode.Status.NO_GOOD
-        qr_record.verified_at = timezone.now()
-        qr_record.save()
-        
-        response = {
-            "verified": is_good,
-            "status": qr_record.status,
-            "qr_uuid": str(qr_record.qr_uuid),
-            "message": "✅ Verification successful" if is_good else "❌ Verification failed"
+        qr_data = qr_record.generate_qr_data()
+        return {
+            "qr_record": {
+                "qr_uuid": str(qr_record.qr_uuid),
+                "item": qr_record.item_name,
+                "part": qr_record.part_name,
+                "maker": qr_record.part_maker,
+                "lot_no": qr_record.lot_no,
+                "status": qr_record.status,
+                "verified_at": qr_record.verified_at.isoformat() if qr_record.verified_at else None,
+                "qr_image_url": qr_record.qr_image.url if qr_record.qr_image else None,
+                "qr_data": qr_data,
+                "created_at": qr_record.created_at.isoformat()
+            }
         }
         
-        if not is_good:
-            mismatches = []
-            if not item_match:
-                mismatches.append(f"item")
-            if not part_match:
-                mismatches.append(f"part name")
-            if not maker_match:
-                mismatches.append(f"maker")
-            if not lot_match:
-                mismatches.append(f"lot number")
-            response["mismatches"] = mismatches
-            response["message"] = f"❌ Verification failed: {', '.join(mismatches)} do not match"
-        
-        return JsonResponse(response)
-        
     except Exception as e:
-        return JsonResponse({
-            "verified": False,
-            "status": "NO_GOOD",
-            "message": f"Error: {str(e)}"
-        }, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
 
 
-# ==================== QR RETRIEVAL ENDPOINTS ====================
+# ==================== QR SCAN ENDPOINT ====================
 
-@api.get("/qr/{qr_uuid}/scan")
+@api.get("/qr/{qr_uuid}/scan", tags=["QR VERIFY"])
 def scan_qr_code(request, qr_uuid: str):
-    """
-    Endpoint called when QR is scanned.
-    Returns the item/part/lot information and status if available.
-    """
+    """Endpoint called when QR is scanned."""
     try:
         qr = QRCode.objects.get(qr_uuid=qr_uuid)
         
@@ -1603,31 +1375,26 @@ def scan_qr_code(request, qr_uuid: str):
             "qr_uuid": str(qr.qr_uuid),
             "item": qr.item_name,
             "part": qr.part_name,
+            "maker": qr.part_maker,
             "lot": qr.lot_no,
             "scan_time": datetime.now().isoformat()
         }
         
-        # Only include status if it has been set
         if qr.status:
             response_data["status"] = qr.status
             response_data["message"] = f"Item is {qr.status}"
-            if qr.status == QRCode.Status.GOOD:
-                response_data["icon"] = "✅"
-            else:
-                response_data["icon"] = "❌"
         else:
             response_data["message"] = "Item not yet verified"
-            response_data["icon"] = "⏳"
         
-        return JsonResponse(response_data)
+        return response_data
         
     except QRCode.DoesNotExist:
         return JsonResponse({"error": "Invalid QR code"}, status=404)
 
 
-# ==================== SEARCH ENDPOINTS ====================
+# ==================== QR SEARCH ENDPOINTS ====================
 
-@api.get("/qr/search/by-lot")
+@api.get("/qr/search/by-lot", tags=["QR VERIFY"])
 def search_by_lot(request, lot_no: str):
     """Search QR codes by lot number"""
     qr_codes = QRCode.objects.filter(lot_no__icontains=lot_no)
@@ -1644,14 +1411,14 @@ def search_by_lot(request, lot_no: str):
             "created_at": qr.created_at
         })
     
-    return JsonResponse({
+    return {
         "lot_no": lot_no,
         "count": len(result),
         "results": result
-    })
+    }
 
 
-@api.get("/qr/search/by-item")
+@api.get("/qr/search/by-item", tags=["QR VERIFY"])
 def search_by_item(request, item_name: str):
     """Search QR codes by item name"""
     qr_codes = QRCode.objects.filter(item_name__icontains=item_name)
@@ -1668,14 +1435,16 @@ def search_by_item(request, item_name: str):
             "created_at": qr.created_at
         })
     
-    return JsonResponse({
+    return {
         "item_name": item_name,
         "count": len(result),
         "results": result
-    })
+    }
 
 
-@api.get("/qr/stats/summary")
+# ==================== QR STATISTICS ENDPOINT ====================
+
+@api.get("/qr/stats/summary", tags=["QR VERIFY"])
 def get_qr_statistics(request):
     """Get summary statistics of QR codes"""
     total = QRCode.objects.count()
@@ -1684,7 +1453,7 @@ def get_qr_statistics(request):
     good_count = QRCode.objects.filter(status=QRCode.Status.GOOD).count()
     no_good_count = QRCode.objects.filter(status=QRCode.Status.NO_GOOD).count()
     
-    return JsonResponse({
+    return {
         "total_qr_codes": total,
         "verified": verified,
         "unverified": unverified,
@@ -1694,12 +1463,12 @@ def get_qr_statistics(request):
         },
         "verification_rate": round((verified / total * 100), 2) if total > 0 else 0,
         "good_percentage": round((good_count / total * 100), 2) if total > 0 else 0
-    })
+    }
 
 
-# ==================== DELETE ENDPOINT ====================
+# ==================== QR DELETE ENDPOINT ====================
 
-@api.delete("/qr/{qr_uuid}")
+@api.delete("/qr/{qr_uuid}", tags=["QR VERIFY"])
 def delete_qr_code(request, qr_uuid: str):
     """Delete a QR code record"""
     try:
@@ -1710,13 +1479,74 @@ def delete_qr_code(request, qr_uuid: str):
         
         qr.delete()
         
-        return JsonResponse({
-            "message": f"QR code {qr_uuid} deleted successfully"
-        })
+        return {"message": f"QR code {qr_uuid} deleted successfully"}
         
     except QRCode.DoesNotExist:
         return JsonResponse({"error": "QR code not found"}, status=404)
 
+
+# ==================== QR SELECTION ENDPOINTS ====================
+
+@api.get("/qr/selection/customers",tags=['Customer/Items/Partname'])
+def get_customers_for_selection(request):
+    """
+    Get all customers with their items and parts for QR selection.
+    This populates the dropdowns in the frontend.
+    """
+    customers = Customer.objects.prefetch_related('items__partnames').all()
+    
+    result = []
+    for customer in customers:
+        items = []
+        for item in customer.items.all():
+            parts = []
+            for part in item.partnames.all():
+                parts.append({
+                    "part_name": part.part_name,
+                    "maker": part.maker
+                })
+            
+            items.append({
+                "item": item.item,
+                "partnames": parts
+            })
+        
+        result.append({
+            "customer_name": customer.customer_name,
+            "items": items
+        })
+    
+    return result
+
+
+@api.get("/qr/selection/items/{customer_name}",tags=['Customer/Items/Partname'])
+def get_items_for_customer(request, customer_name: str):
+    """Get items for a specific customer (cascading dropdown)"""
+    try:
+        customer = Customer.objects.get(customer_name=customer_name)
+        items = customer.items.prefetch_related('partnames').all()
+        
+        result = []
+        for item in items:
+            parts = []
+            for part in item.partnames.all():
+                parts.append({
+                    "part_name": part.part_name,
+                    "maker": part.maker
+                })
+            
+            result.append({
+                "item": item.item,
+                "partnames": parts
+            })
+        
+        return {
+            "customer_name": customer_name,
+            "items": result
+        }
+        
+    except Customer.DoesNotExist:
+        return JsonResponse({"error": "Customer not found"}, status=404)
 
 
 
