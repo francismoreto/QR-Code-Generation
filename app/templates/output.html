@@ -2,323 +2,678 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Worker Output Submission</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>QR Scanner Verification | Camera QR Scan + Cross-Check</title>
+    <!-- Tailwind CSS v3 + Font Awesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- HTML5 QR Code Library for camera scanning -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
         }
-        input[type="number"], input[type="text"] {
-            width: 100px;
-            padding: 10px;
-            margin-bottom: 10px;
+        .glass-card {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 1.5rem;
         }
-        button {
-            padding: 10px;
-            background-color: #4CAF50;
+        button:active { transform: scale(0.98); }
+        input:focus, textarea:focus {
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.3);
+            outline: none;
+        }
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .transition-fade {
+            transition: opacity 0.25s ease-in-out;
+        }
+        #qr-reader {
+            width: 100%;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+        }
+        #qr-reader video {
+            border-radius: 1rem;
+            width: 100%;
+        }
+        #qr-reader__scan_region {
+            background: #f3f4f6;
+            border-radius: 1rem;
+        }
+        .camera-guide {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
             color: white;
-            border: none;
-            cursor: pointer;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            pointer-events: none;
         }
-        button:hover {
-            background-color: #45a049;
+        .scanner-container {
+            position: relative;
         }
-        .data {
-            margin-top: 20px;
+        .api-config-panel {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
         }
-        .process-item {
-            margin-bottom: 20px;
-        }
-        .notification {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px;
-            margin-top: 20px;
-            display: none; /* Hide notification by default */
-        }
-        .error {
-            background-color: red;
+        .status-badge {
+            transition: all 0.2s ease;
         }
     </style>
 </head>
-<body>
+<body class="font-sans antialiased flex items-center justify-center p-4 md:p-6">
 
-    <h1>Worker Output Submission</h1>
-
-    <!-- Lot Number Input and Fetch Data Button -->
-    <label for="lotNoInput">Enter Lot Number:</label>
-    <input type="number" id="lotNoInput" placeholder="Enter lot number">
-    <button id="fetchDataBtn">Fetch Data</button>
-
-    <div class="data" id="dataContainer">
-        <h2>Worker Data:</h2>
-        <div id="workerData"></div>
-
-        <h2>Product Data:</h2>
-        <div id="productData"></div>
-    </div>
-
-    <!-- Process Section -->
-    <div id="processContainer"></div>
-
-    <!-- Notification Section -->
-    <div class="notification" id="notification"></div>
-
-    <script>
-        const fetchDataBtn = document.getElementById('fetchDataBtn');
-        const workerDataElement = document.getElementById('workerData');
-        const productDataElement = document.getElementById('productData');
-        const processContainer = document.getElementById('processContainer');
-        const notificationElement = document.getElementById('notification');
-        const lotNoInput = document.getElementById('lotNoInput');
-
-        let employeeid = "2025-584";  // This is static for now
-        let itemcode = "";  // Will be set dynamically
-        let lotno = null;  // Set by user input
-        let current_status = "ongoing";
-        let processes = [];
-        let currentProcessIndex = 0;
-        let lotQuantity = 0;  // This will store the lot quantity fetched from the database
-
-        let startTime = null;  // Variable to store start time
-        let endTime = null;    // Variable to store end time
-
-        // Fetch Lot Number Data to Get Item Code and Lot Quantity
-        async function fetchLotData(lotno) {
-            try {
-                const response = await fetch(`/api/output/${lotno}`);
-                const lotData = await response.json();
-                if (response.ok && lotData.output_data[0].item_no) {
-                    itemcode = lotData.output_data[0].item_no;  // Set itemcode dynamically
-                    lotQuantity = lotData.output_data[0].lot_quantity;  // Get lot quantity from the database
-                    console.log(`Fetched Lot Data: item_code = ${itemcode}, lot_quantity = ${lotQuantity}`);
-                    return itemcode;
-                } else {
-                    console.log("Invalid lot data received.");
-                    return null;
-                }
-            } catch (error) {
-                console.error("Error fetching lot data:", error);
-                return null;
-            }
-        }
-
-        // Fetch Worker Data
-        async function fetchWorkerData(employeeid) {
-            try {
-                const response = await fetch(`/api/worker/${employeeid}`);
-                const workerData = await response.json();
-                if (response.ok) {
-                    displayWorkerData(workerData);
-                } else {
-                    console.log("Failed to fetch worker data.");
-                }
-            } catch (error) {
-                console.error("Error fetching worker data:", error);
-            }
-        }
-
-        // Fetch Product Data Based on Item Code
-        async function fetchProductData(itemcode) {
-            try {
-                const response = await fetch(`/api/item/${itemcode}`);
-                const productData = await response.json();
-                if (response.ok) {
-                    displayProductData(productData);
-                    console.log("Fetched product data:", productData);
-                    return productData;
-                } else {
-                    console.log("Failed to fetch product data.");
-                }
-            } catch (error) {
-                console.error("Error fetching product data:", error);
-            }
-        }
-
-        // Display Worker Data
-        function displayWorkerData(workerData) {
-            const { employee_id, first_name, last_name, username } = workerData;
-            workerDataElement.innerHTML = `
-                <p><strong>Employee ID:</strong> ${employee_id}</p>
-                <p><strong>First Name:</strong> ${first_name}</p>
-                <p><strong>Last Name:</strong> ${last_name}</p>
-                <p><strong>Username:</strong> ${username}</p>
-            `;
-            console.log("Displayed Worker Data:", workerData);
-        }
-
-        // Display Product Data
-        function displayProductData(productData) {
-            const { item_code, part_no, customer, product_family, process } = productData;
-            productDataElement.innerHTML = `
-                <p><strong>Item Code:</strong> ${item_code}</p>
-                <p><strong>Part No:</strong> ${part_no}</p>
-                <p><strong>Customer:</strong> ${customer}</p>
-                <p><strong>Product Family:</strong> ${product_family}</p>
-            `;
-            processes = process;
-            displayNextProcess();
-        }
-
-        // Display the Next Process
-        function displayNextProcess() {
-            console.log("Current Process Index:", currentProcessIndex);
-            if (currentProcessIndex < processes.length) {
-                const process = processes[currentProcessIndex];
-                const processCode = Object.keys(process)[0];
-                const processName = Object.values(process)[0];
-
-                // Check if the current process has already been updated
-                const processAlreadyUpdated = checkIfProcessAlreadyUpdated(processCode);
-                console.log(`Checking process "${processName}" already updated: ${processAlreadyUpdated}`);
-
-                if (processAlreadyUpdated) {
-                    showNotification(`Process "${processName}" is already completed! Moving to next process.`, "success");
-                    currentProcessIndex++;  // Skip to next process
-                    displayNextProcess();    // Recursively call to display the next process
-                } else {
-                    displayProcess(processCode, processName);
-                }
-            } else {
-                showNotification("Lot is complete! All processes are finished.", "success");
-                console.log("All processes completed.");
-            }
-        }
-
-        // Check if the process has already been updated
-        function checkIfProcessAlreadyUpdated(processCode) {
-            // Fetch the data from worker-output API for the specific process
-            const processData = processes[currentProcessIndex]; // Get process data at the current index
-
-            // Check if the process has been updated already (i.e., has a good_quantity, defect_quantity, and time fields)
-            return processData[processCode]?.good_quantity !== undefined &&
-                   processData[processCode]?.defect_quantity !== undefined &&
-                   processData[processCode]?.time_start !== undefined &&
-                   processData[processCode]?.time_end !== undefined;
-        }
-
-        // Display Process Input Fields
-        function displayProcess(processCode, processName) {
-            // Record the start time when the process is displayed
-            startTime = new Date().toISOString();
-            console.log(`Displaying process "${processName}" with start time: ${startTime}`);
-
-            processContainer.innerHTML = `
-                <div class="process-item">
-                    <h3>Process: ${processName}</h3>
-                    <p><strong>Lot Quantity:</strong> ${lotQuantity}</p>
+<div class="w-full max-w-4xl mx-auto">
+    <!-- Main Card -->
+    <div id="appContainer" class="glass-card shadow-2xl overflow-hidden border border-gray-200">
         
-                    <label for="goodQuantity">Good Quantity:</label>
-                    <input type="number" id="goodQuantity" placeholder="Good Quantity"><br>
-        
-                    <label for="defectQuantity">Defect Quantity:</label>
-                    <input type="number" id="defectQuantity" placeholder="Defect Quantity"><br>
-        
-                    <button onclick="submitWorkerOutput('${processCode}', '${processName}')">Submit Process</button>
+        <!-- Header -->
+        <div class="px-6 pt-6 pb-3 border-b border-gray-200 bg-white/90 flex justify-between items-center">
+            <div>
+                <h1 id="viewTitle" class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
+                    QR Scanner Verification
+                </h1>
+                <p id="viewSubtitle" class="text-sm text-gray-500 mt-0.5">Scan QR Code & Cross-Verify with Database</p>
+            </div>
+            <button id="globalLogoutBtn" class="hidden text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-full p-2 transition-all duration-200">
+                <i class="fas fa-sign-out-alt text-lg"></i>
+            </button>
+        </div>
+
+        <!-- API Configuration Banner (collapsible) -->
+        <div id="apiConfigBanner" class="hidden api-config-panel mx-6 mt-4 p-3 rounded-lg">
+            <div class="flex items-start gap-2">
+                <i class="fas fa-cog text-amber-600 mt-0.5"></i>
+                <div class="flex-1">
+                    <p class="text-sm font-semibold text-amber-800">API Configuration</p>
+                    <p class="text-xs text-amber-700 mt-1">Current endpoint:</p>
+                    <div class="mt-2">
+                        <code id="currentApiEndpoint" class="text-xs bg-amber-100 px-2 py-1 rounded break-all block font-mono"></code>
+                    </div>
+                    <p class="text-xs text-amber-600 mt-2">
+                        <i class="fas fa-info-circle"></i> Make sure your backend server is running at http://127.0.0.1:8000
+                    </p>
+                    <button id="closeApiBanner" class="mt-2 text-xs text-amber-700 hover:text-amber-900 underline">
+                        <i class="fas fa-times"></i> Dismiss
+                    </button>
                 </div>
-            `;
+            </div>
+        </div>
+
+        <!-- Dynamic Content Area -->
+        <div class="p-6 md:p-7 bg-white">
+            <!-- 1️⃣ USER INPUT SCREEN (Step 1: Enter item/part details) -->
+            <div id="userInputScreen" class="transition-fade">
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
+                        <i class="fas fa-box mr-2 text-blue-600"></i>Item Name
+                    </label>
+                    <input type="text" id="itemNameInput" placeholder="e.g., Laptop, Smartphone, Tablet" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                </div>
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
+                        <i class="fas fa-microchip mr-2 text-blue-600"></i>Part Name
+                    </label>
+                    <input type="text" id="partNameInput" placeholder="e.g., CPU, GPU, Battery" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                </div>
+                <div class="mb-5">
+                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
+                        <i class="fas fa-industry mr-2 text-blue-600"></i>Part Maker
+                    </label>
+                    <input type="text" id="partMakerInput" placeholder="e.g., Intel, AMD, Samsung" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
+                        <i class="fas fa-barcode mr-2 text-blue-600"></i>Lot Number
+                    </label>
+                    <input type="text" id="lotNoInput" placeholder="e.g., LOT-2024-001" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                </div>
+                <div id="userInputError" class="text-red-500 text-sm mb-3 min-h-[24px]"></div>
+                <button id="proceedToScanBtn" 
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-camera"></i> Proceed to Scan QR Code
+                </button>
+            </div>
+
+            <!-- 2️⃣ QR SCANNER SCREEN (Camera + Live Scan) -->
+            <div id="scannerScreen" class="hidden transition-fade">
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-50 text-indigo-600 mb-2">
+                        <i class="fas fa-camera-retro text-2xl"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Scan QR Code</h2>
+                    <p class="text-gray-500 text-sm">Position the QR code within the camera frame</p>
+                </div>
+                
+                <!-- Camera Scanner Container -->
+                <div class="scanner-container relative mb-4">
+                    <div id="qr-reader" style="width: 100%;"></div>
+                    <div class="camera-guide">
+                        <i class="fas fa-qrcode mr-1"></i> Align QR code in frame
+                    </div>
+                </div>
+                
+                <!-- Scanned Data Preview -->
+                <div id="scannedDataPreview" class="hidden bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+                    <p class="text-xs font-semibold text-green-700 mb-2"><i class="fas fa-check-circle"></i> QR Code Scanned Successfully</p>
+                    <div id="scannedDataContent" class="text-sm font-mono text-gray-700 space-y-1 break-all"></div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button id="verifyScannedBtn" 
+                            class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                        <i class="fas fa-check-double"></i> Cross-Verify with Backend
+                    </button>
+                    <button id="rescanBtn" 
+                            class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                        <i class="fas fa-sync-alt"></i> Rescan
+                    </button>
+                </div>
+                
+                <button id="backToUserFromScannerBtn" 
+                        class="w-full mt-3 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 py-2.5 rounded-xl transition hover:bg-gray-50 flex items-center justify-center gap-1">
+                    <i class="fas fa-arrow-left"></i> Edit User Input
+                </button>
+                
+                <div id="scannerStatus" class="mt-4 text-center text-sm font-medium min-h-[48px]"></div>
+            </div>
+
+            <!-- 3️⃣ RESULT / LOGOUT SCREEN (Verification Result) -->
+            <div id="resultScreen" class="hidden transition-fade text-center">
+                <div id="resultIcon" class="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-inner"></div>
+                <h2 id="resultTitle" class="text-2xl font-extrabold text-gray-800"></h2>
+                <p id="resultMessage" class="text-gray-600 mt-2 mb-4"></p>
+                
+                <div class="bg-gray-50 rounded-xl p-4 my-4 text-left border border-gray-200 max-h-64 overflow-auto">
+                    <p class="text-xs font-semibold text-gray-500 mb-2"><i class="fas fa-info-circle"></i> VERIFICATION DETAILS</p>
+                    <div id="resultDetails" class="text-sm text-gray-700 space-y-1"></div>
+                </div>
+                
+                <div class="flex gap-3">
+                    <button id="newVerificationBtn" 
+                            class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                        <i class="fas fa-plus-circle"></i> New Verification
+                    </button>
+                    <button id="forceLogoutBtn" 
+                            class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-3 rounded-xl transition flex items-center justify-center gap-2">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Status -->
+        <div class="px-6 py-3 bg-gray-50 text-right text-xs text-gray-500 border-t border-gray-200 flex justify-between items-center">
+            <span id="footerStatus"><i class="fas fa-circle-info text-blue-400"></i> Ready</span>
+            <span id="apiEndpointBadge" class="text-gray-400 font-mono text-[11px] cursor-pointer hover:text-blue-600" onclick="toggleApiBanner()">
+                <i class="fas fa-edit"></i> API: /api/verify/cross-check
+            </span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ======================== DOM Elements ========================
+    const userInputScreen = document.getElementById('userInputScreen');
+    const scannerScreen = document.getElementById('scannerScreen');
+    const resultScreen = document.getElementById('resultScreen');
+    
+    // User Input Fields
+    const itemNameInput = document.getElementById('itemNameInput');
+    const partNameInput = document.getElementById('partNameInput');
+    const partMakerInput = document.getElementById('partMakerInput');
+    const lotNoInput = document.getElementById('lotNoInput');
+    const userInputError = document.getElementById('userInputError');
+    const proceedBtn = document.getElementById('proceedToScanBtn');
+    
+    // Scanner Elements
+    const verifyScannedBtn = document.getElementById('verifyScannedBtn');
+    const rescanBtn = document.getElementById('rescanBtn');
+    const backToUserFromScannerBtn = document.getElementById('backToUserFromScannerBtn');
+    const scannerStatus = document.getElementById('scannerStatus');
+    const scannedDataPreview = document.getElementById('scannedDataPreview');
+    const scannedDataContent = document.getElementById('scannedDataContent');
+    
+    // Result Elements
+    const resultIcon = document.getElementById('resultIcon');
+    const resultTitle = document.getElementById('resultTitle');
+    const resultMessage = document.getElementById('resultMessage');
+    const resultDetails = document.getElementById('resultDetails');
+    const newVerificationBtn = document.getElementById('newVerificationBtn');
+    const forceLogoutBtn = document.getElementById('forceLogoutBtn');
+    const globalLogoutBtn = document.getElementById('globalLogoutBtn');
+    
+    const viewTitle = document.getElementById('viewTitle');
+    const viewSubtitle = document.getElementById('viewSubtitle');
+    const footerStatus = document.getElementById('footerStatus');
+    const apiConfigBanner = document.getElementById('apiConfigBanner');
+    const currentApiEndpoint = document.getElementById('currentApiEndpoint');
+    const closeApiBanner = document.getElementById('closeApiBanner');
+    
+    // ======================== API Configuration ========================
+    // Correct API endpoint as per user specification
+    const API_BASE_URL = "http://127.0.0.1:8000";
+    const VERIFY_ENDPOINT = "/api/verify/cross-check";
+    const FULL_API_URL = API_BASE_URL + VERIFY_ENDPOINT;
+    
+    // ======================== App State ========================
+    let currentUserInput = {
+        item_name: '',
+        part_name: '',
+        part_maker: '',
+        lot_no: ''
+    };
+    
+    let scannedQRData = null;
+    let html5QrCode = null;
+    let isScanning = false;
+    
+    // Toggle API banner
+    function toggleApiBanner() {
+        apiConfigBanner.classList.toggle('hidden');
+    }
+    
+    // Update API display
+    function updateApiDisplay() {
+        if (currentApiEndpoint) {
+            currentApiEndpoint.textContent = FULL_API_URL;
         }
-
-        // Show Notification
-        function showNotification(message, type) {
-            notificationElement.style.display = "block";
-            notificationElement.textContent = message;
-            notificationElement.style.backgroundColor = type === "error" ? "red" : "#4CAF50";
-            console.log(`Notification: ${message} [${type}]`);
-        }
-
-        // Submit Worker Output
-        async function submitWorkerOutput(processCode, processName) {
-            const goodQuantity = parseInt(document.getElementById('goodQuantity').value) || 0;
-            const defectQuantity = parseInt(document.getElementById('defectQuantity').value) || 0;
-            const totalQuantity = goodQuantity + defectQuantity;
-
-            // Record the end time when the submit button is clicked
-            const endTime = new Date().toISOString();
-            console.log(`Submitting output for process "${processName}". Good: ${goodQuantity}, Defect: ${defectQuantity}, Total: ${totalQuantity}`);
-
-            // Validate if Good Quantity + Defect Quantity equals Lot Quantity
-            if (totalQuantity !== lotQuantity) {
-                showNotification("Quantity is not equal to the number of lot quantity.", "error");
-                console.log(`Validation failed. Total quantity ${totalQuantity} does not match lot quantity ${lotQuantity}`);
+        console.log('API Endpoint configured:', FULL_API_URL);
+    }
+    
+    // Helper: Update footer
+    function setFooterMessage(msg, isError = false) {
+        footerStatus.innerHTML = isError ? `<i class="fas fa-exclamation-triangle text-amber-500"></i> ${msg}` : `<i class="fas fa-circle-info text-blue-400"></i> ${msg}`;
+    }
+    
+    // Validate user input fields
+    function validateUserInput() {
+        const item = itemNameInput.value.trim();
+        const part = partNameInput.value.trim();
+        const maker = partMakerInput.value.trim();
+        const lot = lotNoInput.value.trim();
+        
+        if (!item) { userInputError.innerText = 'Item Name is required'; return false; }
+        if (!part) { userInputError.innerText = 'Part Name is required'; return false; }
+        if (!maker) { userInputError.innerText = 'Part Maker is required'; return false; }
+        if (!lot) { userInputError.innerText = 'Lot Number is required'; return false; }
+        
+        userInputError.innerText = '';
+        return true;
+    }
+    
+    // Parse QR code data - supports JSON format with flexible field names to match backend schema
+    function parseQRData(qrText) {
+        try {
+            // Try to parse as JSON
+            const parsed = JSON.parse(qrText);
+            
+            // Flexible field mapping to match backend expected structure
+            // Backend expects: qr_uuid, item, part { name, maker }, lot_no
+            const qr_uuid = parsed.qr_uuid || parsed.uuid || parsed.id;
+            const item = parsed.item || parsed.item_name;
+            
+            // Handle part object or flat fields
+            let partName = '';
+            let partMaker = '';
+            
+            if (parsed.part) {
+                partName = parsed.part.name || parsed.part;
+                partMaker = parsed.part.maker || '';
             } else {
-                // Prepare the output_data as a list of dictionaries
-                const output_data = [{
-                    item_no: itemcode,
-                    employee_id: employeeid,
-                    process_code: processCode,
-                    process_name: processName,
-                    lot_quantity: lotQuantity,
-                    good_quantity: goodQuantity,
-                    defect_quantity: defectQuantity,
-                    time_start: startTime,
-                    time_end: endTime
-                }];
-
-                const data = {
-                    lot_no: lotno,
-                    current_status: current_status,
-                    output_data: output_data,
-                    current_process_index: currentProcessIndex
+                partName = parsed.part_name || parsed.partName || '';
+                partMaker = parsed.part_maker || parsed.partMaker || parsed.maker || '';
+            }
+            
+            const lot_no = parsed.lot_no || parsed.lot_number || parsed.lot;
+            
+            if (qr_uuid && item && partName && lot_no) {
+                return {
+                    qr_uuid: qr_uuid,
+                    item: item,
+                    part: {
+                        name: partName,
+                        maker: partMaker || ''
+                    },
+                    lot_no: lot_no,
+                    status: parsed.status || null
                 };
-
-                try {
-                    const response = await fetch(`/api/worker-output`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(data)
-                    });
-
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        console.log("Response from server:", responseData);
-                        showNotification("Output submitted successfully!", "success");
-                    } else {
-                        const errorMessage = await response.text();
-                        showNotification(`Error: ${errorMessage}`, "error");
-                    }
-                } catch (error) {
-                    console.error("Error submitting worker output:", error);
-                    showNotification("Error submitting worker output.", "error");
-                }
-
-                // Proceed to the next process only if the current one is valid
-                currentProcessIndex++;
-                displayNextProcess();
             }
+            throw new Error('Missing required fields in QR data');
+        } catch (e) {
+            console.warn('QR parsing error:', e);
+            return null;
         }
-
-        // Fetch Data Button Click Event
-        fetchDataBtn.addEventListener("click", async () => {
-            lotno = parseInt(lotNoInput.value.trim());
-
-            if (!lotno) {
-                return;  // Do nothing, no error message on page load
-            }
-
-            console.log(`Fetching data for Lot Number: ${lotno}`);
-
-            const fetchedItemCode = await fetchLotData(lotno);
-            if (fetchedItemCode) {
-                console.log(`Fetched item code: ${fetchedItemCode}`);
-                await fetchWorkerData(employeeid);
-                await fetchProductData(fetchedItemCode);
+    }
+    
+    // Start camera scanner
+    async function startScanner() {
+        if (html5QrCode) {
+            try {
+                await html5QrCode.stop();
+            } catch (e) { console.warn(e); }
+        }
+        
+        html5QrCode = new Html5Qrcode("qr-reader");
+        const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+            if (!isScanning) return;
+            
+            console.log('QR Scanned:', decodedText);
+            const parsedData = parseQRData(decodedText);
+            
+            if (parsedData) {
+                scannedQRData = parsedData;
+                isScanning = false;
+                html5QrCode.stop().then(() => {
+                    scannerStatus.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> QR code scanned successfully!</span>';
+                    scannedDataContent.innerHTML = `
+                        <div class="grid grid-cols-2 gap-1 text-xs">
+                            <span class="font-semibold text-gray-600">QR UUID:</span>
+                            <span class="font-mono text-blue-700 break-all">${scannedQRData.qr_uuid}</span>
+                            <span class="font-semibold text-gray-600">Item:</span>
+                            <span>${scannedQRData.item}</span>
+                            <span class="font-semibold text-gray-600">Part Name:</span>
+                            <span>${scannedQRData.part.name}</span>
+                            <span class="font-semibold text-gray-600">Part Maker:</span>
+                            <span>${scannedQRData.part.maker || 'N/A'}</span>
+                            <span class="font-semibold text-gray-600">Lot No:</span>
+                            <span>${scannedQRData.lot_no}</span>
+                        </div>
+                    `;
+                    scannedDataPreview.classList.remove('hidden');
+                    verifyScannedBtn.disabled = false;
+                    setFooterMessage('QR scanned. Ready for verification.');
+                }).catch(err => {
+                    console.error('Failed to stop scanner', err);
+                });
             } else {
-                showNotification("Invalid lot number or item not found.", "error");
-                console.log("Lot number or item code not found.");
+                scannerStatus.innerHTML = '<span class="text-red-500"><i class="fas fa-exclamation-triangle"></i> Invalid QR format. Please scan a valid verification QR code with required fields (qr_uuid, item, part, lot_no).</span>';
+                setTimeout(() => {
+                    if (isScanning) scannerStatus.innerHTML = '';
+                }, 4000);
             }
-        });
-
-        // Initialize on Page Load
-        window.onload = function() {
-            processContainer.innerHTML = "";
-            console.log("Page Loaded: Process container cleared");
         };
-
-    </script>
-
+        
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
+        try {
+            await html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback);
+            isScanning = true;
+            scannerStatus.innerHTML = '<span class="text-blue-600"><i class="fas fa-camera"></i> Camera active. Scan QR code...</span>';
+            setFooterMessage('Camera active - position QR code in frame');
+        } catch (err) {
+            console.error('Camera error:', err);
+            scannerStatus.innerHTML = '<span class="text-red-500">Unable to access camera. Please ensure camera permissions are granted.</span>';
+            setFooterMessage('Camera access failed', true);
+        }
+    }
+    
+    // Stop scanner and cleanup
+    async function stopScanner() {
+        if (html5QrCode && isScanning) {
+            try {
+                await html5QrCode.stop();
+                isScanning = false;
+            } catch (e) { console.warn(e); }
+        }
+    }
+    
+    // Transition to scanner screen
+    async function switchToScannerScreen() {
+        if (!validateUserInput()) {
+            setFooterMessage("Please fill all user input fields correctly", true);
+            return;
+        }
+        
+        currentUserInput = {
+            item_name: itemNameInput.value.trim(),
+            part_name: partNameInput.value.trim(),
+            part_maker: partMakerInput.value.trim(),
+            lot_no: lotNoInput.value.trim()
+        };
+        
+        scannedQRData = null;
+        scannedDataPreview.classList.add('hidden');
+        verifyScannedBtn.disabled = true;
+        scannerStatus.innerHTML = '';
+        
+        userInputScreen.classList.add('hidden');
+        scannerScreen.classList.remove('hidden');
+        resultScreen.classList.add('hidden');
+        viewTitle.innerText = 'Scan QR Code';
+        viewSubtitle.innerText = 'Use camera to scan the QR code';
+        globalLogoutBtn.classList.remove('hidden');
+        setFooterMessage(`User: ${currentUserInput.item_name} | Ready to scan QR`);
+        
+        await startScanner();
+    }
+    
+    // Call backend with proper error handling
+    async function callCrossVerificationAPI() {
+        if (!scannedQRData) {
+            scannerStatus.innerHTML = '<span class="text-red-500">No QR code scanned. Please scan a QR code first.</span>';
+            return;
+        }
+        
+        const requestPayload = {
+            user_input: {
+                item_name: currentUserInput.item_name,
+                part_name: currentUserInput.part_name,
+                part_maker: currentUserInput.part_maker,
+                lot_no: currentUserInput.lot_no
+            },
+            scanned_data: {
+                qr_uuid: scannedQRData.qr_uuid,
+                item: scannedQRData.item,
+                part: {
+                    name: scannedQRData.part.name,
+                    maker: scannedQRData.part.maker
+                },
+                lot_no: scannedQRData.lot_no,
+                status: scannedQRData.status || null
+            }
+        };
+        
+        const originalBtnText = verifyScannedBtn.innerHTML;
+        verifyScannedBtn.innerHTML = '<div class="spinner"></div> Verifying...';
+        verifyScannedBtn.disabled = true;
+        scannerStatus.innerHTML = '<span class="text-blue-600"><i class="fas fa-spinner fa-pulse"></i> Sending to backend for cross-verification...</span>';
+        
+        try {
+            console.log('Calling API:', FULL_API_URL);
+            console.log('Payload:', requestPayload);
+            
+            const response = await fetch(FULL_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(requestPayload)
+            });
+            
+            // Check content type before parsing
+            const contentType = response.headers.get('content-type');
+            
+            if (!response.ok) {
+                let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    errorMessage = errorData.message || errorData.detail || errorMessage;
+                } else {
+                    const textResponse = await response.text();
+                    const truncatedText = textResponse.length > 300 ? textResponse.substring(0, 300) + '...' : textResponse;
+                    errorMessage = `Server response: ${truncatedText}`;
+                    
+                    // Show API banner if there's an issue
+                    if (textResponse.includes('404') || textResponse.includes('Not Found') || response.status === 404) {
+                        apiConfigBanner.classList.remove('hidden');
+                        setFooterMessage('API endpoint not found. Please check if backend is running at http://127.0.0.1:8000', true);
+                    }
+                }
+                throw new Error(errorMessage);
+            }
+            
+            if (!contentType || !contentType.includes('application/json')) {
+                const textResponse = await response.text();
+                const truncatedText = textResponse.length > 200 ? textResponse.substring(0, 200) + '...' : textResponse;
+                throw new Error(`Expected JSON but got ${contentType || 'unknown'}: ${truncatedText}`);
+            }
+            
+            const result = await response.json();
+            await stopScanner();
+            displayVerificationResult(result);
+            
+        } catch (error) {
+            console.error("Verification API error:", error);
+            scannerStatus.innerHTML = `<span class="text-red-500"><i class="fas fa-exclamation-triangle"></i> ${error.message}</span>`;
+            setFooterMessage(`API Error: ${error.message}`, true);
+            verifyScannedBtn.innerHTML = originalBtnText;
+            verifyScannedBtn.disabled = false;
+        }
+    }
+    
+    // Display result
+    function displayVerificationResult(apiResponse) {
+        const isVerified = apiResponse.verified === true;
+        const status = apiResponse.status;
+        const message = apiResponse.message || (isVerified ? "✅ Verification Successful! All data matches." : "❌ Verification Failed: Data mismatch detected.");
+        
+        if (isVerified && status === "GOOD") {
+            resultIcon.innerHTML = '<i class="fas fa-check-circle text-5xl text-green-600"></i>';
+            resultIcon.className = "mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4";
+            resultTitle.className = "text-2xl font-extrabold text-green-700";
+            resultTitle.innerText = "✅ VERIFIED - GOOD";
+            resultMessage.innerHTML = `<span class="text-green-600 font-semibold">${message}</span>`;
+        } else {
+            resultIcon.innerHTML = '<i class="fas fa-times-circle text-5xl text-red-600"></i>';
+            resultIcon.className = "mx-auto w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4";
+            resultTitle.className = "text-2xl font-extrabold text-red-700";
+            resultTitle.innerText = "❌ NO GOOD";
+            resultMessage.innerHTML = `<span class="text-red-600 font-semibold">${message}</span>`;
+        }
+        
+        let detailsHtml = `
+            <div class="mb-3 p-3 bg-white rounded border border-gray-200">
+                <p class="font-semibold text-gray-700 mb-2">📊 Comparison Results:</p>
+                <div class="space-y-2 text-xs">
+                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Item:</span> <span>User: "${currentUserInput.item_name}" | QR: "${scannedQRData?.item}"</span></div>
+                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Part Name:</span> <span>User: "${currentUserInput.part_name}" | QR: "${scannedQRData?.part.name}"</span></div>
+                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Part Maker:</span> <span>User: "${currentUserInput.part_maker}" | QR: "${scannedQRData?.part.maker || 'N/A'}"</span></div>
+                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Lot Number:</span> <span>User: "${currentUserInput.lot_no}" | QR: "${scannedQRData?.lot_no}"</span></div>
+                    <div class="flex justify-between"><span class="font-medium">QR UUID:</span> <span class="font-mono text-xs break-all">${scannedQRData?.qr_uuid}</span></div>
+                </div>
+            </div>`;
+        
+        if (apiResponse.details) {
+            detailsHtml += `<div class="mt-2"><p class="font-semibold text-gray-700 text-xs mb-1">🔍 API Details:</p><pre class="text-xs bg-gray-100 p-2 rounded overflow-x-auto">${JSON.stringify(apiResponse.details, null, 2)}</pre></div>`;
+        }
+        
+        if (apiResponse.mismatches && apiResponse.mismatches.length > 0) {
+            detailsHtml += `<div class="mt-2"><p class="font-semibold text-red-600 text-xs mb-1">⚠️ Mismatches:</p><ul class="list-disc pl-4 text-xs text-red-600">`;
+            apiResponse.mismatches.forEach(m => { detailsHtml += `<li>${m}</li>`; });
+            detailsHtml += `</ul></div>`;
+        }
+        
+        if (apiResponse.qr_data) {
+            detailsHtml += `<div class="mt-2"><p class="font-semibold text-gray-700 text-xs mb-1">📦 Database QR Record:</p><pre class="text-xs bg-gray-100 p-2 rounded overflow-x-auto">${JSON.stringify(apiResponse.qr_data, null, 2)}</pre></div>`;
+        }
+        
+        resultDetails.innerHTML = detailsHtml;
+        
+        userInputScreen.classList.add('hidden');
+        scannerScreen.classList.add('hidden');
+        resultScreen.classList.remove('hidden');
+        viewTitle.innerText = 'Verification Result';
+        viewSubtitle.innerText = 'Cross-Check Complete';
+        globalLogoutBtn.classList.remove('hidden');
+        setFooterMessage(`Verification completed: ${status}`);
+    }
+    
+    // Rescan
+    async function rescan() {
+        scannedQRData = null;
+        scannedDataPreview.classList.add('hidden');
+        verifyScannedBtn.disabled = true;
+        scannerStatus.innerHTML = '';
+        await startScanner();
+        setFooterMessage('Camera restarted. Please scan QR code.');
+    }
+    
+    // Full reset
+    async function fullReset() {
+        await stopScanner();
+        itemNameInput.value = '';
+        partNameInput.value = '';
+        partMakerInput.value = '';
+        lotNoInput.value = '';
+        userInputError.innerText = '';
+        currentUserInput = { item_name: '', part_name: '', part_maker: '', lot_no: '' };
+        scannedQRData = null;
+        scannedDataPreview.classList.add('hidden');
+        
+        userInputScreen.classList.remove('hidden');
+        scannerScreen.classList.add('hidden');
+        resultScreen.classList.add('hidden');
+        viewTitle.innerText = 'QR Scanner Verification';
+        viewSubtitle.innerText = 'Scan QR Code & Cross-Verify with Database';
+        globalLogoutBtn.classList.add('hidden');
+        setFooterMessage('Ready. Enter item details and proceed to scan.');
+    }
+    
+    async function backToUserInput() {
+        await stopScanner();
+        userInputScreen.classList.remove('hidden');
+        scannerScreen.classList.add('hidden');
+        resultScreen.classList.add('hidden');
+        viewTitle.innerText = 'QR Scanner Verification';
+        viewSubtitle.innerText = 'Enter item & part details';
+        globalLogoutBtn.classList.add('hidden');
+        setFooterMessage('Editing user input');
+    }
+    
+    // Event Bindings
+    proceedBtn.addEventListener('click', switchToScannerScreen);
+    verifyScannedBtn.addEventListener('click', callCrossVerificationAPI);
+    rescanBtn.addEventListener('click', rescan);
+    backToUserFromScannerBtn.addEventListener('click', backToUserInput);
+    newVerificationBtn.addEventListener('click', fullReset);
+    forceLogoutBtn.addEventListener('click', fullReset);
+    globalLogoutBtn.addEventListener('click', () => {
+        if (confirm('Logout and clear all session data?')) fullReset();
+    });
+    if (closeApiBanner) {
+        closeApiBanner.addEventListener('click', () => apiConfigBanner.classList.add('hidden'));
+    }
+    
+    // Initialize
+    updateApiDisplay();
+    setFooterMessage(`API: ${FULL_API_URL} | Enter details, then scan QR code.`);
+    console.log('QR Scanner Verification System Ready');
+    console.log('API Endpoint:', FULL_API_URL);
+    console.log('Expected QR format: JSON with qr_uuid, item, part (name/maker), lot_no');
+</script>
 </body>
 </html>

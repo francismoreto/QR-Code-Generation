@@ -4,7 +4,7 @@ from django.core.serializers import serialize
 import json
 from ninja import NinjaAPI
 from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode
-from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, DirectQRScanSchema
+from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema
 import csv
 import os
 import io
@@ -1040,34 +1040,114 @@ def get_worker(request, employeeid:str):
 
 # ==================== VERIFICATION STEP 1: Verify Data Exists ====================
 
-@api.post("/verify/data", tags=["QR VERIFY"])
-def verify_data(request, data: DataVerificationSchema):
+@api.post("/verify/cross-check", response=CrossVerificationResponseSchema)
+def cross_verify_qr(request, data: CrossVerificationSchema):
     """
-    FIRST VERIFICATION STEP: Check if the data exists in the database.
-    This is the initial verification before QR code generation.
+    CROSS VERIFICATION: Compare user input with scanned QR code data.
+    This is the single verification endpoint that validates:
+    1. QR code exists in database
+    2. Scanned QR data matches database
+    3. User input matches scanned QR data
     
     Request body:
     {
-        "item_name": "Laptop",
-        "part_name": "CPU",
-        "part_maker": "Intel",
-        "lot_no": "LOT-2024-001"
+        "user_input": {
+            "item_name": "Laptop",
+            "part_name": "CPU",
+            "part_maker": "Intel",
+            "lot_no": "LOT-2024-001"
+        },
+        "scanned_data": {
+            "qr_uuid": "1c5323bc-28f6-465a-a968-8487947d1eb4",
+            "item": "Laptop",
+            "part": {"name": "CPU", "maker": "Intel"},
+            "lot_no": "LOT-2024-001",
+            "status": null
+        }
     }
+    
+    Returns:
+        - GOOD: All data matches
+        - NO GOOD: Any mismatch found
     """
     try:
-        # Check if the data combination exists
-        qr_record = QRCode.objects.filter(
-            item_name=data.item_name,
-            part_name=data.part_name,
-            part_maker=data.part_maker,
-            lot_no=data.lot_no
-        ).first()
+        # Extract data from request
+        user_input = data.user_input
+        scanned_data = data.scanned_data
         
-        if qr_record:
-            return {
-                "verified": True,
-                "message": "✅ Data found in database. Proceed to QR scan.",
-                "data": {
+        # STEP 1: Verify QR code exists in database
+        try:
+            qr_record = QRCode.objects.get(qr_uuid=scanned_data.qr_uuid)
+        except QRCode.DoesNotExist:
+            return CrossVerificationResponseSchema(
+                verified=False,
+                status="NO_GOOD",
+                message="❌ VERIFICATION FAILED: QR code not found in database.",
+                details={
+                    "qr_uuid": scanned_data.qr_uuid,
+                    "found_in_db": False
+                }
+            )
+        
+        # STEP 2: Verify scanned QR data matches database
+        db_matches_scanned = {
+            "item": (qr_record.item_name == scanned_data.item),
+            "part_name": (qr_record.part_name == scanned_data.part.name),
+            "part_maker": (qr_record.part_maker == scanned_data.part.maker),
+            "lot_no": (qr_record.lot_no == scanned_data.lot_no)
+        }
+        
+        is_qr_valid = all(db_matches_scanned.values())
+        
+        if not is_qr_valid:
+            mismatches = []
+            if not db_matches_scanned["item"]:
+                mismatches.append(f"Item (DB: {qr_record.item_name}, QR: {scanned_data.item})")
+            if not db_matches_scanned["part_name"]:
+                mismatches.append(f"Part name (DB: {qr_record.part_name}, QR: {scanned_data.part.name})")
+            if not db_matches_scanned["part_maker"]:
+                mismatches.append(f"Maker (DB: {qr_record.part_maker}, QR: {scanned_data.part.maker})")
+            if not db_matches_scanned["lot_no"]:
+                mismatches.append(f"Lot No (DB: {qr_record.lot_no}, QR: {scanned_data.lot_no})")
+            
+            return CrossVerificationResponseSchema(
+                verified=False,
+                status="NO_GOOD",
+                message="❌ VERIFICATION FAILED: QR code data does not match database records.",
+                details={
+                    "qr_valid": False,
+                    "qr_data_integrity": "COMPROMISED"
+                },
+                mismatches=mismatches
+            )
+        
+        # STEP 3: Compare user input with scanned QR data
+        user_matches_qr = {
+            "item": (user_input.item_name == scanned_data.item),
+            "part_name": (user_input.part_name == scanned_data.part.name),
+            "part_maker": (user_input.part_maker == scanned_data.part.maker),
+            "lot_no": (user_input.lot_no == scanned_data.lot_no)
+        }
+        
+        all_match = all(user_matches_qr.values())
+        
+        # STEP 4: Update QR record and return result
+        if all_match:
+            qr_record.status = QRCode.Status.GOOD
+            qr_record.verified_at = timezone.now()
+            qr_record.save()
+            
+            return CrossVerificationResponseSchema(
+                verified=True,
+                status="GOOD",
+                message="✅ VERIFICATION SUCCESSFUL: User input matches the scanned QR code.",
+                details={
+                    "user_input_matches_qr": True,
+                    "qr_data_integrity": "VERIFIED",
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "verified_at": qr_record.verified_at.isoformat()
+                },
+                qr_data={
                     "qr_uuid": str(qr_record.qr_uuid),
                     "item": qr_record.item_name,
                     "part": {
@@ -1076,105 +1156,53 @@ def verify_data(request, data: DataVerificationSchema):
                     },
                     "lot_no": qr_record.lot_no
                 }
-            }
-        else:
-            return {
-                "verified": False,
-                "message": "❌ Data not found in database. Cannot generate QR code.",
-                "data": None
-            }
-            
-    except Exception as e:
-        return JsonResponse({
-            "verified": False,
-            "message": f"Error during verification: {str(e)}",
-            "data": None
-        }, status=500)
-
-
-# ==================== VERIFICATION STEP 2: Verify QR Scan (FIXED) ====================
-
-@api.post("/verify/direct-scan", tags=["QR VERIFY"])
-def verify_direct_qr_scan(request, data: DirectQRScanSchema):
-    """
-    DIRECT QR SCAN VERIFICATION: Verify the scanned QR code directly.
-    The QR code should contain the UUID, item, part, and lot_no.
-    
-    Request body (direct from QR scan):
-    {
-        "qr_uuid": "1c5323bc-28f6-465a-a968-8487947d1eb4",
-        "item": "LN6878001",
-        "part": {"name": "PHR-2 WHITE", "maker": "JST"},
-        "lot_no": "564",
-        "status": null
-    }
-    """
-    try:
-        # Get the QR record from database using UUID from scanned data
-        qr_record = QRCode.objects.get(qr_uuid=data.qr_uuid)
-        
-        # Compare database data with scanned data
-        item_match = (qr_record.item_name == data.item)
-        part_match = (qr_record.part_name == data.part.name)
-        maker_match = (qr_record.part_maker == data.part.maker)
-        lot_match = (qr_record.lot_no == data.lot_no)
-        
-        # Determine if GOOD or NO_GOOD
-        is_good = item_match and part_match and maker_match and lot_match
-        
-        # Update QR record with verification result
-        qr_record.status = QRCode.Status.GOOD if is_good else QRCode.Status.NO_GOOD
-        qr_record.verified_at = timezone.now()
-        qr_record.save()
-        
-        # Prepare response
-        response_data = {
-            "verified": is_good,
-            "status": qr_record.status,
-            "message": "",
-            "qr_data": {
-                "qr_uuid": str(qr_record.qr_uuid),
-                "item": qr_record.item_name,
-                "part": {
-                    "name": qr_record.part_name,
-                    "maker": qr_record.part_maker
-                },
-                "lot_no": qr_record.lot_no,
-                "verified_at": qr_record.verified_at.isoformat() if qr_record.verified_at else None
-            }
-        }
-        
-        if is_good:
-            response_data["message"] = "✅ VERIFICATION SUCCESSFUL: The scanned QR code matches the database. Item is GOOD."
+            )
         else:
             # Build mismatch details
             mismatches = []
-            if not item_match:
-                mismatches.append(f"Item (DB: {qr_record.item_name}, Scanned: {data.item})")
-            if not part_match:
-                mismatches.append(f"Part name (DB: {qr_record.part_name}, Scanned: {data.part.name})")
-            if not maker_match:
-                mismatches.append(f"Maker (DB: {qr_record.part_maker}, Scanned: {data.part.maker})")
-            if not lot_match:
-                mismatches.append(f"Lot No (DB: {qr_record.lot_no}, Scanned: {data.lot_no})")
+            if not user_matches_qr["item"]:
+                mismatches.append(f"Item (User: {user_input.item_name}, QR: {scanned_data.item})")
+            if not user_matches_qr["part_name"]:
+                mismatches.append(f"Part name (User: {user_input.part_name}, QR: {scanned_data.part.name})")
+            if not user_matches_qr["part_maker"]:
+                mismatches.append(f"Maker (User: {user_input.part_maker}, QR: {scanned_data.part.maker})")
+            if not user_matches_qr["lot_no"]:
+                mismatches.append(f"Lot No (User: {user_input.lot_no}, QR: {scanned_data.lot_no})")
             
-            response_data["message"] = f"❌ VERIFICATION FAILED: The scanned QR code does not match the database. Item is NO GOOD. Mismatches: {', '.join(mismatches)}"
-            response_data["mismatches"] = mismatches
-        
-        return response_data
-        
-    except QRCode.DoesNotExist:
-        return JsonResponse({
-            "verified": False,
-            "status": "NO_GOOD",
-            "message": "❌ VERIFICATION FAILED: QR code not found in database."
-        }, status=404)
+            # Update status if not already GOOD
+            if qr_record.status != QRCode.Status.GOOD:
+                qr_record.status = QRCode.Status.NO_GOOD
+                qr_record.verified_at = timezone.now()
+                qr_record.save()
+            
+            return CrossVerificationResponseSchema(
+                verified=False,
+                status="NO_GOOD",
+                message="❌ VERIFICATION FAILED: User input does not match the scanned QR code.",
+                details={
+                    "user_input_matches_qr": False,
+                    "qr_data_integrity": "VERIFIED" if is_qr_valid else "COMPROMISED",
+                    "qr_uuid": str(qr_record.qr_uuid)
+                },
+                mismatches=mismatches,
+                qr_data={
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "item": qr_record.item_name,
+                    "part": {
+                        "name": qr_record.part_name,
+                        "maker": qr_record.part_maker
+                    },
+                    "lot_no": qr_record.lot_no
+                }
+            )
+            
     except Exception as e:
-        return JsonResponse({
-            "verified": False,
-            "status": "NO_GOOD",
-            "message": f"Error during verification: {str(e)}"
-        }, status=500)
+        return CrossVerificationResponseSchema(
+            verified=False,
+            status="NO_GOOD",
+            message=f"Error during verification: {str(e)}",
+            details={"error": str(e)}
+        )
 
 # ==================== QR GENERATION ENDPOINT ====================
 @api.post("/qr/generate")

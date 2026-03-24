@@ -1,6 +1,6 @@
 from ninja import Schema
 from datetime import datetime
-from typing import List,Optional
+from typing import List,Optional, Any
 from enum import Enum
 
 class WorkerSchema(Schema):
@@ -218,10 +218,41 @@ class ErrorResponseSchema(Schema):
 class DeleteResponseSchema(Schema):
     message: str
 
-class DirectQRScanSchema(Schema):
-    """Schema for direct QR scan where the QR contains all data"""
+# ==================== CROSS-VERIFICATION SCHEMAS ====================
+
+class ScannedPartSchema(Schema):
+    """Part structure from scanned QR data"""
+    name: str
+    maker: str
+
+class ScannedQRDataSchema(Schema):
+    """Complete scanned QR data structure"""
     qr_uuid: str
     item: str
-    part: ScannedPartSchema  # Reuse existing ScannedPartSchema
+    part: ScannedPartSchema
     lot_no: str
-    status: Optional[str] = None  # Optional since it might be null initially
+    status: Optional[str] = None
+
+class UserInputDataSchema(Schema):
+    """User input data for verification"""
+    item_name: str
+    part_name: str
+    part_maker: str
+    lot_no: str
+
+class CrossVerificationSchema(Schema):
+    """
+    MAIN VERIFICATION SCHEMA
+    Combines user input with scanned QR data for complete verification
+    """
+    user_input: UserInputDataSchema
+    scanned_data: ScannedQRDataSchema
+
+class CrossVerificationResponseSchema(Schema):
+    """Response schema for cross-verification endpoint"""
+    verified: bool
+    status: str
+    message: str
+    details: Optional[dict[str, Any]] = None
+    mismatches: Optional[List[str]] = None
+    qr_data: Optional[dict[str, Any]] = None
