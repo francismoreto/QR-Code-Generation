@@ -79,80 +79,9 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        .debug-console {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 450px;
-            max-width: 90vw;
-            background: #1e1e2e;
-            color: #cdd6f4;
-            border-radius: 12px;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 11px;
-            z-index: 1000;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            border: 1px solid #313244;
-        }
-        .debug-console-header {
-            padding: 8px 12px;
-            background: #181825;
-            border-radius: 12px 12px 0 0;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #313244;
-        }
-        .debug-console-title {
-            font-weight: bold;
-            font-size: 12px;
-            color: #89b4fa;
-        }
-        .debug-console-content {
-            max-height: 350px;
-            overflow-y: auto;
-            padding: 8px;
-            font-size: 11px;
-        }
-        .debug-console-content p {
-            margin: 4px 0;
-            padding: 4px;
-            border-left: 3px solid;
-            word-break: break-all;
-            white-space: pre-wrap;
-        }
-        .debug-info { border-left-color: #89b4fa; }
-        .debug-success { border-left-color: #a6e3a1; color: #a6e3a1; }
-        .debug-error { border-left-color: #f38ba8; color: #f38ba8; }
-        .debug-warning { border-left-color: #f9e2af; color: #f9e2af; }
-        .debug-raw { border-left-color: #cba6f7; color: #cba6f7; font-family: monospace; }
-        .debug-console-toggle {
-            background: none;
-            border: none;
-            color: #cdd6f4;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .debug-console-toggle:hover { opacity: 0.8; }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
-    <!-- Debug Console Panel -->
-    <div class="debug-console" id="debugConsole">
-        <div class="debug-console-header" onclick="toggleDebugConsole()">
-            <span class="debug-console-title">
-                <i class="fas fa-terminal mr-2"></i>QR Scanner Debug Console
-            </span>
-            <button class="debug-console-toggle" onclick="event.stopPropagation(); clearDebugConsole()">
-                <i class="fas fa-trash-alt"></i>
-            </button>
-        </div>
-        <div class="debug-console-content" id="debugConsoleContent">
-            <p class="debug-info">✅ Debug console ready. Scanning QR codes will show detailed logs here.</p>
-        </div>
-    </div>
-
     <!-- Navbar -->
     <div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-30">
         <div class="flex-1">
@@ -162,17 +91,16 @@
             <a class="btn btn-ghost text-xl">QR Admin System</a>
         </div>
         <div class="flex-none gap-2">
-            <span class="text-sm text-base-content/70 hidden sm:inline">QR Verification Portal</span>
+            <span class="text-sm text-base-content/70 hidden sm:inline" id="userRoleBadge"></span>
             <div class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
                     <div class="w-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
-                        <span class="font-semibold">AD</span>
+                        <span class="font-semibold" id="userInitial">AD</span>
                     </div>
                 </div>
                 <ul tabindex="0" class="mt-3 z-[1] p-2 shadow menu menu-sm dropdown-content bg-base-100 rounded-box w-52">
-                    <li><a class="text-sm">Profile</a></li>
-                    <li><a class="text-sm">Settings</a></li>
-                    <li><a class="text-sm text-error">Logout</a></li>
+                    <li><a id="userProfileDisplay" class="text-sm">Profile</a></li>
+                    <li><a id="logoutBtn" class="text-sm text-error">Logout</a></li>
                 </ul>
             </div>
         </div>
@@ -217,8 +145,8 @@
             </div>
             <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-base-200 bg-base-100">
                 <div class="flex items-center gap-3 p-3 bg-base-200 rounded-lg">
-                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-content font-semibold shadow-sm"><span>AD</span></div>
-                    <div class="flex-1 min-w-0"><p class="font-semibold text-base-content truncate">Admin User</p><p class="text-xs text-base-content/50 truncate">admin@example.com</p></div>
+                    <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-primary-content font-semibold shadow-sm"><span id="sidebarUserInitial">AD</span></div>
+                    <div class="flex-1 min-w-0"><p class="font-semibold text-base-content truncate" id="sidebarUserName">Admin User</p><p class="text-xs text-base-content/50 truncate" id="sidebarUserEmail">admin@example.com</p></div>
                 </div>
             </div>
         </div>
@@ -239,8 +167,12 @@
                     <h2 class="text-xl font-semibold mb-4">Recent QR Verifications</h2>
                     <div class="overflow-x-auto">
                         <table class="table table-zebra w-full">
-                            <thead><tr><th>Timestamp</th><th>QR UUID</th><th>Item</th><th>Status</th><th>Result</th></thead>
-                            <tbody id="verificationHistoryTable"><tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr></tbody>
+                            <thead>
+                                <tr><th>Timestamp</th><th>QR UUID</th><th>Item</th><th>Status</th><th>Result</th></tr>
+                            </thead>
+                            <tbody id="verificationHistoryTable">
+                                <tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -273,39 +205,62 @@
     </dialog>
 
     <script>
-        // Debug Console Functions
-        function addDebugLog(message, type = 'info') {
-            const timestamp = new Date().toLocaleTimeString();
-            const container = document.getElementById('debugConsoleContent');
-            if (container) {
-                const logElement = document.createElement('p');
-                logElement.className = `debug-${type}`;
-                logElement.innerHTML = `<span style="color:#6c7086;">[${timestamp}]</span> ${message}`;
-                container.insertBefore(logElement, container.firstChild);
-                if (container.children.length > 60) {
-                    container.removeChild(container.lastChild);
+        // ==================== AUTHENTICATION CHECK ====================
+        function checkAdminAuth() {
+            const storedEmployee = sessionStorage.getItem("employee");
+            if (!storedEmployee) {
+                window.location.href = "/login";
+                return false;
+            }
+            
+            try {
+                const userData = JSON.parse(storedEmployee);
+                if (!userData.role || userData.role.toLowerCase() !== 'admin') {
+                    sessionStorage.removeItem("employee");
+                    window.location.href = "/login";
+                    return false;
                 }
-            }
-            console.log(`[QR Debug] ${message}`);
-        }
-        
-        function clearDebugConsole() {
-            const container = document.getElementById('debugConsoleContent');
-            if (container) {
-                container.innerHTML = '<p class="debug-info">✅ Debug console cleared. Ready for new scans.</p>';
+                return userData;
+            } catch(e) {
+                sessionStorage.removeItem("employee");
+                window.location.href = "/login";
+                return false;
             }
         }
         
-        function toggleDebugConsole() {
-            const content = document.getElementById('debugConsoleContent');
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-            } else {
-                content.style.display = 'none';
-            }
+        const currentUser = checkAdminAuth();
+        if (!currentUser) {
+            throw new Error("Unauthorized");
         }
         
-        // Configuration - Try multiple API endpoint patterns
+        // ==================== UI UPDATE WITH USER DATA ====================
+        function updateUIForUser() {
+            const userName = currentUser.employee_id || currentUser.name || "Admin";
+            const userRole = currentUser.role || "admin";
+            const initial = userName.substring(0,2).toUpperCase();
+            document.getElementById("userInitial").innerText = initial;
+            document.getElementById("sidebarUserInitial").innerText = initial;
+            document.getElementById("sidebarUserName").innerText = userName;
+            document.getElementById("sidebarUserEmail").innerText = `${userRole}@company.com`;
+            document.getElementById("userRoleBadge").innerHTML = `<i class="fas fa-shield-alt mr-1"></i>${userRole.toUpperCase()}`;
+            const profileSpan = document.getElementById("userProfileDisplay");
+            if(profileSpan) profileSpan.innerHTML = `<i class="fas fa-user-shield mr-2"></i>${userName} (Administrator)`;
+        }
+        
+        updateUIForUser();
+        
+        // ==================== LOGOUT FUNCTION ====================
+        function logout() {
+            sessionStorage.removeItem("employee");
+            window.location.href = "/login";
+        }
+        
+        document.getElementById("logoutBtn")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            logout();
+        });
+        
+        // ==================== QR SCANNER CONFIGURATION ====================
         const API_ENDPOINTS = [
             '/api/verify/direct-scan',
             '/verify/direct-scan', 
@@ -315,28 +270,24 @@
             '/verify/scan'
         ];
         
-        let currentEndpointIndex = 0;
         let html5QrCode = null;
         let isScanning = false;
         let isProcessing = false;
         let scanCount = 0;
         let verifiedCount = 0;
-        const qrReaderElementId = "qr-reader";
-        const verificationResultDiv = document.getElementById("verification-result");
-        const scanStatusDiv = document.getElementById("scan-status");
-        const verificationHistoryBody = document.getElementById("verificationHistoryTable");
         let verificationHistory = [];
         
         function updateVerificationHistory(verificationData) {
             verificationHistory.unshift(verificationData);
             if (verificationHistory.length > 10) verificationHistory.pop();
             
+            const tbody = document.getElementById("verificationHistoryTable");
             if (verificationHistory.length === 0) {
-                verificationHistoryBody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>`;
                 return;
             }
             
-            verificationHistoryBody.innerHTML = verificationHistory.map(v => `
+            tbody.innerHTML = verificationHistory.map(v => `
                 <tr class="hover:bg-base-200/50">
                     <td class="text-sm">${v.timestamp}</td>
                     <td class="text-xs font-mono">${v.qr_uuid.substring(0, 8)}...${v.qr_uuid.substring(v.qr_uuid.length-4)}</td>
@@ -348,34 +299,20 @@
         }
         
         async function verifyDirectQRScan(qrData) {
-            addDebugLog(`========== START VERIFICATION ==========`, 'info');
-            addDebugLog(`Raw QR data: ${qrData.substring(0, 200)}${qrData.length > 200 ? '...' : ''}`, 'raw');
-            
             try {
-                // Parse QR data
                 let parsedData;
                 try {
                     parsedData = JSON.parse(qrData);
-                    addDebugLog(`✅ Successfully parsed JSON`, 'success');
-                    addDebugLog(`Parsed keys: ${Object.keys(parsedData).join(', ')}`, 'info');
                 } catch (e) {
-                    addDebugLog(`❌ Failed to parse JSON: ${e.message}`, 'error');
-                    throw new Error("QR code is not valid JSON. Please ensure QR contains valid JSON format.");
+                    throw new Error("QR code is not valid JSON format.");
                 }
                 
-                // Validate required fields
                 if (!parsedData.qr_uuid) throw new Error("Missing required field: qr_uuid");
                 if (!parsedData.item) throw new Error("Missing required field: item");
                 if (!parsedData.part || !parsedData.part.name || !parsedData.part.maker) {
                     throw new Error("Missing required fields: part.name and part.maker");
                 }
                 if (!parsedData.lot_no) throw new Error("Missing required field: lot_no");
-                
-                addDebugLog(`✅ Validation passed`, 'success');
-                addDebugLog(`QR UUID: ${parsedData.qr_uuid}`, 'info');
-                addDebugLog(`Item: ${parsedData.item}`, 'info');
-                addDebugLog(`Part: ${parsedData.part.name} (${parsedData.part.maker})`, 'info');
-                addDebugLog(`Lot No: ${parsedData.lot_no}`, 'info');
                 
                 const payload = {
                     qr_uuid: parsedData.qr_uuid,
@@ -385,14 +322,10 @@
                     status: parsedData.status || null
                 };
                 
-                addDebugLog(`Attempting to call API endpoint...`, 'info');
-                
-                // Try multiple endpoints
                 let lastError = null;
                 for (let i = 0; i < API_ENDPOINTS.length; i++) {
                     const endpoint = API_ENDPOINTS[i];
                     const fullUrl = `${window.location.origin}${endpoint}`;
-                    addDebugLog(`Trying endpoint ${i + 1}/${API_ENDPOINTS.length}: ${fullUrl}`, 'info');
                     
                     try {
                         const response = await fetch(fullUrl, {
@@ -401,18 +334,11 @@
                             body: JSON.stringify(payload)
                         });
                         
-                        addDebugLog(`Response status: ${response.status} ${response.statusText}`, 'info');
-                        
-                        // Check if response is JSON
                         const contentType = response.headers.get("content-type");
                         if (contentType && contentType.includes("application/json")) {
                             const result = await response.json();
-                            addDebugLog(`Response JSON: ${JSON.stringify(result, null, 2)}`, 'raw');
                             
                             if (response.ok) {
-                                addDebugLog(`✅ Success! Endpoint ${endpoint} works!`, 'success');
-                                
-                                // Update counts
                                 scanCount++;
                                 document.getElementById('scanCountDisplay').textContent = scanCount;
                                 if (result.verified) {
@@ -428,43 +354,34 @@
                                     verified: result.verified
                                 });
                                 
-                                addDebugLog(`========== VERIFICATION SUCCESSFUL ==========`, 'success');
                                 return result;
                             } else {
-                                addDebugLog(`❌ Server error: ${result.message || 'Unknown error'}`, 'error');
                                 lastError = result.message;
-                                // Continue to next endpoint
                             }
                         } else {
-                            const text = await response.text();
-                            addDebugLog(`Response is not JSON (first 200 chars): ${text.substring(0, 200)}`, 'warning');
-                            lastError = `Endpoint returned HTML/plain text (status ${response.status})`;
+                            lastError = `Server returned unexpected response (status ${response.status})`;
                         }
                     } catch (fetchError) {
-                        addDebugLog(`❌ Fetch error for ${endpoint}: ${fetchError.message}`, 'error');
                         lastError = fetchError.message;
                     }
                 }
                 
-                // If we get here, all endpoints failed
-                throw new Error(`All API endpoints failed. Last error: ${lastError}`);
+                throw new Error(`Verification failed: ${lastError}`);
                 
             } catch (error) {
-                addDebugLog(`❌ VERIFICATION ERROR: ${error.message}`, 'error');
-                addDebugLog(`========== VERIFICATION FAILED ==========`, 'error');
-                
                 return {
                     verified: false,
                     status: "NO_GOOD",
-                    message: `Verification error: ${error.message}`,
+                    message: error.message,
                     error: true
                 };
             }
         }
         
         function displayVerificationResult(result) {
-            verificationResultDiv.classList.remove("hidden");
-            verificationResultDiv.classList.add("result-animation");
+            const resultDiv = document.getElementById("verification-result");
+            resultDiv.classList.remove("hidden");
+            resultDiv.classList.add("result-animation");
             
             const isGood = result.verified === true;
             const statusColor = isGood ? "success" : "error";
@@ -498,58 +415,38 @@
                             <span class="font-medium text-base-content/60">Lot No:</span>
                             <span class="font-mono">${result.qr_data.lot_no}</span>
                         </div>
-                        ${result.qr_data.verified_at ? `<div class="mt-2 pt-2 border-t border-base-200"><span class="font-medium text-base-content/60">Verified At:</span> <span class="text-sm">${new Date(result.qr_data.verified_at).toLocaleString()}</span></div>` : ''}
                     </div>
                 </div>`;
             }
             
-            if (result.mismatches && result.mismatches.length > 0) {
-                html += `<div class="mt-3 p-3 bg-error/10 rounded-lg border border-error/20">
-                    <p class="text-xs font-semibold text-error mb-2">⚠️ MISMATCHES FOUND:</p>
-                    <ul class="list-disc list-inside text-sm space-y-1">
-                        ${result.mismatches.map(m => `<li class="text-error/80">${m}</li>`).join('')}
-                    </ul>
-                </div>`;
-            }
-            
-            verificationResultDiv.innerHTML = html;
-            verificationResultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            resultDiv.innerHTML = html;
+            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         
         async function onQRCodeScanned(decodedText) {
-            addDebugLog(`🔍 QR Code detected!`, 'info');
-            
-            if (isProcessing) {
-                addDebugLog(`⚠️ Already processing, skipping...`, 'warning');
-                return;
-            }
+            if (isProcessing) return;
             isProcessing = true;
             
-            // Stop scanning immediately
             if (html5QrCode && isScanning) {
                 try {
                     await html5QrCode.stop();
                     isScanning = false;
-                    addDebugLog(`Scanner stopped after detection`, 'info');
-                } catch (err) {
-                    addDebugLog(`Error stopping scanner: ${err.message}`, 'error');
-                }
+                } catch (err) {}
             }
             
-            scanStatusDiv.classList.remove("hidden");
-            scanStatusDiv.innerHTML = '<div class="loading-spinner mr-2"></div><span>Verifying QR code...</span>';
+            const scanStatus = document.getElementById("scan-status");
+            scanStatus.classList.remove("hidden");
+            scanStatus.innerHTML = '<div class="loading-spinner mr-2"></div><span>Verifying QR code...</span>';
             
             const verificationResult = await verifyDirectQRScan(decodedText);
             
-            scanStatusDiv.classList.add("hidden");
+            scanStatus.classList.add("hidden");
             displayVerificationResult(verificationResult);
             
             isProcessing = false;
         }
         
         async function startQrScanner() {
-            addDebugLog(`Starting QR scanner...`, 'info');
-            
             if (html5QrCode && isScanning) {
                 try {
                     await html5QrCode.stop();
@@ -557,18 +454,17 @@
                 isScanning = false;
             }
             
-            verificationResultDiv.classList.add("hidden");
-            verificationResultDiv.innerHTML = "";
-            scanStatusDiv.classList.add("hidden");
+            document.getElementById("verification-result").classList.add("hidden");
+            document.getElementById("verification-result").innerHTML = "";
+            document.getElementById("scan-status").classList.add("hidden");
             isProcessing = false;
             
-            const readerElement = document.getElementById(qrReaderElementId);
+            const readerElement = document.getElementById("qr-reader");
             if (readerElement) {
                 while (readerElement.firstChild) readerElement.removeChild(readerElement.firstChild);
             }
             
-            html5QrCode = new Html5Qrcode(qrReaderElementId);
-            addDebugLog(`Html5Qrcode instance created`, 'info');
+            html5QrCode = new Html5Qrcode("qr-reader");
             
             const config = { 
                 fps: 10, 
@@ -584,51 +480,34 @@
                     config, 
                     onQRCodeScanned, 
                     (errorMessage) => {
-                        if (errorMessage && !errorMessage.includes("No MultiFormat Readers") && !errorMessage.includes("NotFound")) {
-                            // Only log critical errors
-                            if (errorMessage.includes("Camera")) {
-                                addDebugLog(`Camera error: ${errorMessage}`, 'error');
-                            }
-                        }
+                        // Silent error handling - no console output
                     }
                 );
                 isScanning = true;
-                addDebugLog(`✅ QR Scanner started successfully!`, 'success');
                 document.getElementById("restartScannerBtn").disabled = false;
                 document.getElementById("stopScannerBtn").disabled = false;
             } catch (err) {
-                addDebugLog(`❌ Failed to start QR scanner: ${err.message}`, 'error');
-                verificationResultDiv.classList.remove("hidden");
-                verificationResultDiv.innerHTML = `<div class="alert alert-error shadow-lg"><div><span class="text-2xl">❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p><p class="text-xs mt-2">Please ensure camera permissions are granted and you're using HTTPS/localhost.</p></div></div></div>`;
+                document.getElementById("verification-result").classList.remove("hidden");
+                document.getElementById("verification-result").innerHTML = `<div class="alert alert-error shadow-lg"><div><span class="text-2xl">❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p><p class="text-xs mt-2">Please ensure camera permissions are granted.</p></div></div></div>`;
                 isScanning = false;
             }
         }
         
         async function stopQrScanner() {
-            addDebugLog(`Stopping QR scanner...`, 'info');
             if (html5QrCode && isScanning) {
                 try {
                     await html5QrCode.stop();
                     isScanning = false;
-                    addDebugLog(`✅ Scanner stopped`, 'success');
-                    const readerElement = document.getElementById(qrReaderElementId);
-                    if (readerElement) {
-                        while (readerElement.firstChild) readerElement.removeChild(readerElement.firstChild);
-                    }
-                } catch (err) {
-                    addDebugLog(`Error stopping scanner: ${err.message}`, 'error');
-                }
+                } catch (err) {}
             }
         }
         
         async function restartScanner() {
-            addDebugLog(`Restarting scanner...`, 'info');
             await stopQrScanner();
             setTimeout(() => startQrScanner(), 100);
         }
         
         function openQRModal() {
-            addDebugLog(`Opening QR scanner modal`, 'info');
             const qrModal = document.getElementById("qrScannerModal");
             if (qrModal) {
                 qrModal.showModal();
@@ -637,7 +516,6 @@
         }
         
         function closeQRModal() {
-            addDebugLog(`Closing QR scanner modal`, 'info');
             const qrModal = document.getElementById("qrScannerModal");
             if (qrModal) {
                 stopQrScanner();
@@ -645,12 +523,7 @@
             }
         }
         
-        // Event Listeners
-        document.getElementById("qrVerifyLink")?.addEventListener("click", (e) => { e.preventDefault(); openQRModal(); });
-        document.getElementById("restartScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) restartScanner(); });
-        document.getElementById("stopScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) stopQrScanner(); });
-        document.getElementById("qrScannerModal")?.addEventListener("close", () => { stopQrScanner(); verificationResultDiv.classList.add("hidden"); verificationResultDiv.innerHTML = ""; scanStatusDiv.classList.add("hidden"); isProcessing = false; });
-        
+        // ==================== SIDEBAR FUNCTIONS ====================
         function toggleSidebar() { 
             const sidebar = document.getElementById('sidebar'); 
             const overlay = document.getElementById('overlay'); 
@@ -674,7 +547,13 @@
             } 
         }
         
+        // ==================== EVENT LISTENERS ====================
+        document.getElementById("qrVerifyLink")?.addEventListener("click", (e) => { e.preventDefault(); openQRModal(); });
+        document.getElementById("restartScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) restartScanner(); });
+        document.getElementById("stopScannerBtn")?.addEventListener("click", () => { if (document.getElementById("qrScannerModal").open) stopQrScanner(); });
+        document.getElementById("qrScannerModal")?.addEventListener("close", () => { stopQrScanner(); document.getElementById("verification-result").classList.add("hidden"); document.getElementById("verification-result").innerHTML = ""; document.getElementById("scan-status").classList.add("hidden"); isProcessing = false; });
         document.getElementById('menuBtn')?.addEventListener('click', toggleSidebar);
+        
         window.addEventListener('resize', () => { 
             const sidebar = document.getElementById('sidebar'); 
             const overlay = document.getElementById('overlay'); 
@@ -686,13 +565,6 @@
                 overlay.classList.add('hidden'); 
             } 
         });
-        
-        addDebugLog(`QR Verification System Ready`, 'success');
-        addDebugLog(`Will try these API endpoints:`, 'info');
-        API_ENDPOINTS.forEach((endpoint, i) => {
-            addDebugLog(`  ${i+1}. ${window.location.origin}${endpoint}`, 'info');
-        });
-        addDebugLog(`Expected QR format: {"qr_uuid": "...", "item": "...", "part": {"name": "...", "maker": "..."}, "lot_no": "..."}`, 'info');
     </script>
 </body>
 </html>
