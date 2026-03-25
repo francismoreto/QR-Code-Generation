@@ -1110,6 +1110,11 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
             if not db_matches_scanned["lot_no"]:
                 mismatches.append(f"Lot No (DB: {qr_record.lot_no}, QR: {scanned_data.lot_no})")
             
+            # Update status to NO_GOOD when QR data integrity is compromised
+            qr_record.status = QRCode.Status.NO_GOOD
+            qr_record.verified_at = timezone.now()
+            qr_record.save()
+            
             return CrossVerificationResponseSchema(
                 verified=False,
                 status="NO_GOOD",
@@ -1131,8 +1136,9 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
         
         all_match = all(user_matches_qr.values())
         
-        # STEP 4: Update QR record and return result
+        # STEP 4: Update QR record based on verification result
         if all_match:
+            # Set status to GOOD regardless of previous state
             qr_record.status = QRCode.Status.GOOD
             qr_record.verified_at = timezone.now()
             qr_record.save()
@@ -1169,11 +1175,11 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
             if not user_matches_qr["lot_no"]:
                 mismatches.append(f"Lot No (User: {user_input.lot_no}, QR: {scanned_data.lot_no})")
             
-            # Update status if not already GOOD
-            if qr_record.status != QRCode.Status.GOOD:
-                qr_record.status = QRCode.Status.NO_GOOD
-                qr_record.verified_at = timezone.now()
-                qr_record.save()
+            # ALWAYS update status to NO_GOOD when user input doesn't match
+            # This ensures if it was previously GOOD, it gets changed to NO_GOOD
+            qr_record.status = QRCode.Status.NO_GOOD
+            qr_record.verified_at = timezone.now()
+            qr_record.save()
             
             return CrossVerificationResponseSchema(
                 verified=False,
@@ -1182,7 +1188,8 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
                 details={
                     "user_input_matches_qr": False,
                     "qr_data_integrity": "VERIFIED" if is_qr_valid else "COMPROMISED",
-                    "qr_uuid": str(qr_record.qr_uuid)
+                    "qr_uuid": str(qr_record.qr_uuid),
+                    "verified_at": qr_record.verified_at.isoformat()
                 },
                 mismatches=mismatches,
                 qr_data={
@@ -1203,6 +1210,7 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
             message=f"Error during verification: {str(e)}",
             details={"error": str(e)}
         )
+        
 
 # ==================== QR GENERATION ENDPOINT ====================
 @api.post("/qr/generate")
