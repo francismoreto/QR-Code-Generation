@@ -4,13 +4,13 @@ from .api import api
 
 urlpatterns = [
     path('home/', views.home, name='home'),
-    path('api/', api.urls),
     path('worker/create', views.worker),
     path('product/create', views.product_create),
     path('output/', views.output),
     path('product/update', views.product_update),
     path('output/register', views.output_register),
     path('login/', views.login),
-    path('dashboard/', views.dashboard)
-
+    path('dashboard/', views.dashboard),
+    path('customer/create', views.customer_create),
+    path('api/', api.urls),
 ]

@@ -39,3 +39,7 @@ def login(request):
 def dashboard(request):
     # Render the form for updating product
     return render(request, 'dashboard.html')
+
+def customer_create(request):
+    # Render the form for updating product
+    return render(request, 'customer_create.html')

@@ -51,6 +51,13 @@
             #printArea { position: fixed; left: 0; top: 0; width: 100%; }
             .no-print { display: none !important; }
         }
+
+        /* Customer link hover effect */
+        .customer-link-item:hover {
+            background: linear-gradient(95deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 100%);
+            border-left: 3px solid #3b82f6;
+            padding-left: 13px !important;
+        }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
@@ -82,7 +89,7 @@
     <div class="flex relative">
         <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeSidebar()"></div>
 
-        <!-- Sidebar -->
+        <!-- Sidebar with CUSTOMER MANAGEMENT added - redirects to /customer/create -->
         <div id="sidebar" class="fixed left-0 top-0 h-full w-72 bg-base-100 shadow-2xl z-50 sidebar-transition -translate-x-full lg:translate-x-0 lg:relative lg:top-auto lg:h-[calc(100vh-64px)] lg:z-40 flex flex-col">
             <button onclick="closeSidebar()" class="btn btn-ghost btn-circle absolute right-2 top-2 lg:hidden"><i class="fas fa-times"></i></button>
             <div class="p-6 border-b border-base-200 flex-shrink-0">
@@ -96,7 +103,7 @@
                     </div>
                 </div>
             </div>
-            <div class="p-4 flex-shrink-0">
+            <div class="p-4 flex-shrink-0 overflow-y-auto">
                 <div class="mb-4">
                     <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">Main</p>
                     <ul class="space-y-1">
@@ -115,6 +122,20 @@
                                 <i class="fas fa-list-alt w-5"></i>
                                 <span>QR List</span>
                                 <span id="qrListBadge" class="ml-auto badge badge-primary badge-sm hidden">0</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- NEW CUSTOMER MANAGEMENT SECTION - redirects to /customer/create -->
+                <div class="mb-4 mt-6 border-t border-base-200 pt-4">
+                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">CRM</p>
+                    <ul class="space-y-1">
+                        <li>
+                            <a href="/customer/create" id="customerLink" class="customer-link-item flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-user-plus w-5 text-primary"></i>
+                                <span>Add Customer</span>
+                                <i class="fas fa-external-link-alt text-xs ml-auto opacity-50"></i>
                             </a>
                         </li>
                     </ul>
@@ -163,7 +184,9 @@
                         <h2 class="text-xl font-semibold mb-4">Recent QR Verifications</h2>
                         <div class="overflow-x-auto">
                             <table class="table table-zebra w-full">
-                                <thead><tr><th>Timestamp</th><th>QR UUID</th><th>User Item</th><th>QR Item</th><th>Status</th><th>Backend Updated</th><th>Result</th></tr></thead>
+                                <thead>\
+                                    <th>Timestamp</th><th>QR UUID</th><th>User Item</th><th>QR Item</th><th>Status</th><th>Backend Updated</th><th>Result</th>\
+                                </thead>
                                 <tbody id="verificationHistoryTable">
                                     <tr><td colspan="7" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30 block"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>
                                 </tbody>
@@ -306,12 +329,10 @@
                 <button onclick="document.getElementById('qrDetailModal').close()" class="btn btn-sm btn-circle btn-ghost">✕</button>
             </div>
             <div class="p-6">
-                <!-- QR image -->
                 <div class="flex flex-col items-center gap-3 mb-6">
                     <div id="detailQrCanvas" class="qr-detail-qr-box"></div>
                     <div id="detailStatusBadge"></div>
                 </div>
-                <!-- Info -->
                 <div class="bg-base-100 rounded-xl p-4 border border-base-200 mb-5">
                     <div class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                         <span class="text-base-content/60 font-medium">Item</span>       <span id="detailItem"      class="font-semibold"></span>
@@ -322,7 +343,6 @@
                         <span class="text-base-content/60 font-medium">Created</span>    <span id="detailCreatedAt" class="text-xs"></span>
                     </div>
                 </div>
-                <!-- Actions -->
                 <div class="flex flex-wrap gap-2 justify-center no-print">
                     <button id="detailDownloadBtn" class="btn btn-primary btn-sm gap-2"><i class="fas fa-download"></i> Download PNG</button>
                     <button id="detailPrintBtn"    class="btn btn-outline btn-sm gap-2"><i class="fas fa-print"></i> Print</button>
@@ -376,6 +396,14 @@
         document.getElementById('apiConfigBanner').classList.remove('hidden');
     }
     document.getElementById('closeApiBanner')?.addEventListener('click', () => document.getElementById('apiConfigBanner').classList.add('hidden'));
+
+    // ==================== CUSTOMER LINK REDIRECT HANDLER - redirects to /customer/create ====================
+    // The link already has href="/customer/create", but we also add a click handler to ensure proper navigation
+    document.getElementById("customerLink")?.addEventListener("click", function(e) {
+        // Allow default navigation to /customer/create
+        // No preventDefault - let it redirect naturally
+        console.log("Redirecting to customer creation page: /customer/create");
+    });
 
     // ==================== SCANNER ====================
     async function updateQRStatusInBackend(qrData, isVerified, mismatches) {
@@ -554,7 +582,6 @@
                     </div>
                 </div>
             </div>`).join('');
-        // Render mini QR codes
         setTimeout(()=>{
             filtered.forEach(r=>{
                 const el=document.getElementById(`mini-${r.qr_uuid.replace(/-/g,'')}`);
@@ -706,7 +733,7 @@
         else{s.classList.add('-translate-x-full');o.classList.add('hidden');}
     });
 
-    console.log('QR System Ready — Generation, Verification & List Enabled');
+    console.log('QR System Ready — Customer link redirects to /customer/create');
     </script>
 </body>
 </html>

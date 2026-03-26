@@ -4,7 +4,7 @@ from django.core.serializers import serialize
 import json
 from ninja import NinjaAPI
 from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode
-from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema
+from .schema import WorkerSchema,ProductSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema
 import csv
 import os
 import io
@@ -160,61 +160,7 @@ def create_admin(request, data: WorkerSchema):
     except Exception as e:
         return JsonResponse({"error": str(e)})
 
-@api.post("/item",tags=['ADD DATA'])
-def create_product(request, data: ProductSchema):   
 
-    '''process_code_mapping = [
-        {"E151": "Winding wire"},
-        {"E203": "1st Cutting Wire"},
-        {"E208": "Turn, inductance"},
-        {"E205": "1st peeling"},
-        {"E201": "1st soldering"},
-        {"E209": "Adhering pedestal, coil"},
-        {"E324": "Drying Adhesive"},
-        {"E204": "Intermediate inductance"},
-        {"E124": "Adhering pedestal, drying"},
-        {"E515": "Impulse"},
-        {"E210": "Inserting white tubes"},
-        {"E211": "Inserting black tubes"},
-        {"E333": "Crimping terminal"},
-        {"E345": "Terminal soldering"},
-        {"E334": "Heat shrinking"},
-        {"E346": "Terminal coil forming"},
-        {"E508": "Final electrical inspection (L/Impulse)"},
-        {"E611": "Appearance"},
-        {"E621": "Jig for checking terminal"},
-        {"E321": "Adhering pedestal(substrate)"},
-        {"E200": "Wire marking"},
-        {"E325": "Coil taping"}
-    ]'''
-
-    if len(data.item_code) != 7: #checking length of item code
-        return {"message": "Item code length invalid"}
-
-    try:
-        item_no_exist = Product.objects.filter(item_code = data.item_code).get() #Variable for checking if item no already exist
-        itemcode = data.item_code
-        if item_no_exist:
-            return JsonResponse ({"message": "Item already exist"})
-
-
-    except Product.DoesNotExist: #Product is not found. it will create a new one
-        Product.objects.create(
-            item_code=data.item_code,
-            part_no=data.part_no,
-            process= data.process,
-            customer=data.customer,
-            product_family=data.product_family,
-        )
-        return JsonResponse({
-            "message": "Product successfully created",
-            "item_code": data.item_code,
-            "part_no": data.part_no,
-            "process": data.process,
-            "customer": data.customer,
-            "product_family": data.product_family
-        })
-    
 @api.post("/customers", tags=['Customer/Items/Partname'])
 def create_customer(request, data: CustomerSchema):
     # Check if customer with same name already exists FIRST
@@ -407,60 +353,6 @@ def append_item_parts(request, customer_name: str, item_name: str, data: List[Pa
             "details": str(e)
         }, status=500)
         
-@api.post("/item",tags=['ADD DATA'])
-def create_product(request, data: ProductSchema):   
-
-    '''process_code_mapping = [
-        {"E151": "Winding wire"},
-        {"E203": "1st Cutting Wire"},
-        {"E208": "Turn, inductance"},
-        {"E205": "1st peeling"},
-        {"E201": "1st soldering"},
-        {"E209": "Adhering pedestal, coil"},
-        {"E324": "Drying Adhesive"},
-        {"E204": "Intermediate inductance"},
-        {"E124": "Adhering pedestal, drying"},
-        {"E515": "Impulse"},
-        {"E210": "Inserting white tubes"},
-        {"E211": "Inserting black tubes"},
-        {"E333": "Crimping terminal"},
-        {"E345": "Terminal soldering"},
-        {"E334": "Heat shrinking"},
-        {"E346": "Terminal coil forming"},
-        {"E508": "Final electrical inspection (L/Impulse)"},
-        {"E611": "Appearance"},
-        {"E621": "Jig for checking terminal"},
-        {"E321": "Adhering pedestal(substrate)"},
-        {"E200": "Wire marking"},
-        {"E325": "Coil taping"}
-    ]'''
-
-    if len(data.item_code) != 7: #checking length of item code
-        return {"message": "Item code length invalid"}
-
-    try:
-        item_no_exist = Product.objects.filter(item_code = data.item_code).get() #Variable for checking if item no already exist
-        itemcode = data.item_code
-        if item_no_exist:
-            return JsonResponse ({"message": "Item already exist"})
-
-
-    except Product.DoesNotExist: #Product is not found. it will create a new one
-        Product.objects.create(
-            item_code=data.item_code,
-            part_no=data.part_no,
-            process= data.process,
-            customer=data.customer,
-            product_family=data.product_family,
-        )
-        return JsonResponse({
-            "message": "Product successfully created",
-            "item_code": data.item_code,
-            "part_no": data.part_no,
-            "process": data.process,
-            "customer": data.customer,
-            "product_family": data.product_family
-        })
 
 @api.post("/item/{itemcode}/process/", tags=['UPDATE PROCESS'])
 def update_process(request,data:ProductSchema,itemcode:str):
@@ -491,90 +383,6 @@ def update_process(request,data:ProductSchema,itemcode:str):
             "process": data.process,
             })
 
-
-@api.post("/worker-output", tags=['ADD DATA'])
-def create_output(request, data: WorkerOutputSchema):
-    try:
-        # Validate that lot_no is exactly 7 digits
-        if len(str(data.lot_no)) != 7 or not str(data.lot_no).isdigit():
-            return JsonResponse({"message": "Lot number must be exactly 7 digits."})
-
-        # Check if the item_code exists in the Product model
-        item_code_filter = data.output_data[0].get('item_no')
-        product = Product.objects.filter(item_code=item_code_filter).first()
-
-        if not product:
-            return JsonResponse({"message": "Product not found for the given item code."})
-
-        # Check if the lot_no already exists
-        existing_lot = WorkerOutput.objects.filter(lot_no=data.lot_no).first()
-
-        if existing_lot:
-            # Lot exists, check processes
-            current_product_processes = product.process
-            current_process_index = existing_lot.current_process_index
-            updated_processes = []
-
-            for output in data.output_data:
-                process_code = output.get('process_code')
-
-                # Check if the process already exists in the output data of the existing lot
-                existing_process = next((proc for proc in existing_lot.output_data if proc['process_code'] == process_code), None)
-
-                if existing_process:
-                    # Check if the process is fully filled (i.e., not updateable)
-                    if all(key in existing_process and existing_process[key] is not None for key in ['good_quantity', 'defect_quantity', 'time_start', 'time_end']):
-                        # If fully filled, do not update this process, and move to the next process
-                        continue  # Skip this process and proceed to the next one
-
-                    # If it's not fully filled, update the process with the new data
-                    existing_process['good_quantity'] = output.get('good_quantity', existing_process.get('good_quantity'))
-                    existing_process['defect_quantity'] = output.get('defect_quantity', existing_process.get('defect_quantity'))
-                    existing_process['time_start'] = output.get('time_start', existing_process.get('time_start'))
-                    existing_process['time_end'] = output.get('time_end', existing_process.get('time_end'))
-
-                    updated_processes.append(existing_process)  # Mark this process as updated
-                else:
-                    # If the process doesn't exist, add the new process data
-                    existing_lot.output_data.append(output)
-                    updated_processes.append(output)
-
-            # After processing all the data, update the lot and set the next process index
-            with transaction.atomic():
-                # Only update the `current_process_index` if there are any updates to be made
-                if updated_processes:
-                    existing_lot.current_status = data.current_status
-                    existing_lot.current_process_index = current_process_index + len(updated_processes)
-                    existing_lot.save()
-
-                updated_data = model_to_dict(existing_lot)
-                return JsonResponse({
-                    "message": "Output successfully updated",
-                    "data": updated_data,
-                })
-
-        else:
-            # If the lot doesn't exist, create a new lot
-            if isinstance(data.output_data, list) and len(data.output_data) > 0:
-                # Validate that good_quantity and defect_quantity are provided for all data
-                for output in data.output_data:
-                    if output.get('good_quantity') is None or output.get('defect_quantity') is None:
-                        return JsonResponse({"message": "Good quantity and defect quantity must be provided for all processes."})
-
-                # Create the new WorkerOutput entry
-                new_lot = WorkerOutput.objects.create(
-                    lot_no=data.lot_no,
-                    current_status=data.current_status,
-                    output_data=data.output_data,
-                    current_process_index=0,  # Start from the first process
-                )
-                new_data = model_to_dict(new_lot)
-                return JsonResponse({"message": "Data added successfully", "data": new_data})
-            else:
-                return JsonResponse({"message": "Invalid or empty output data."})
-
-    except Exception as e:
-        return JsonResponse({"message": f"An error occurred: {str(e)}"})
 
 
 @api.get("/customers/{customer_name}", tags=['Customer/Items/Partname'])
