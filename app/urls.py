@@ -12,5 +12,7 @@ urlpatterns = [
     path('login/', views.login),
     path('dashboard/', views.dashboard),
     path('customer/create', views.customer_create),
-    path('api/', api.urls),
+    path('item/add', views.item_add),
+    path('material/update', views.material_update),
+    path('api/', api.urls)
 ]

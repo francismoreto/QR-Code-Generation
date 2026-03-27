@@ -352,103 +352,118 @@ def append_item_parts(request, customer_name: str, item_name: str, data: List[Pa
             "error": "Failed to add parts",
             "details": str(e)
         }, status=500)
-        
 
-@api.post("/item/{itemcode}/process/", tags=['UPDATE PROCESS'])
-def update_process(request,data:ProductSchema,itemcode:str):
-    # Fetch the product directly
-    product = Product.objects.get(item_code=itemcode)
+@api.get("/customers/{customer_name}/items", tags=['Customer/Items/Partname'])
+def get_customer_items(request, customer_name: str):
+    """
+    Get all items and their parts for a specific customer.
     
+    Returns a list of all items belonging to the customer,
+    including their associated parts.
     
-
-    #To not leave empty string being stored in process
-    if not data.process or all(not process for process in data.process):
-        return JsonResponse({"message": "Process list cannot be empty."})
-
-    # Append new process data without altering existing data
-    product.process.append(data.process[0])
-    error_messages = [] #use for storing wrong process code length
-    for index, process in enumerate(data.process):
-        for key in process.keys():
-            if len(key) != 4: #Checking length of process code is equal to 4
-                error_messages.append(f"Key '{key}' in entry {index} is not 4 characters long.") # to see which line a error occur 
-    if error_messages:
-        return JsonResponse({"messages": error_messages})
-    
-    
-    product.save()
-    
-    return JsonResponse({"message": "Processes updated successfully!",
-            "item_code": data.item_code,
-            "process": data.process,
-            })
-
-
-
-@api.get("/customers/{customer_name}", tags=['Customer/Items/Partname'])
-def get_customer_by_name(request, customer_name: str):
+    Response example:
+    {
+        "status": "success",
+        "customer": "TechCorp",
+        "items": [
+            {
+                "item": "Laptop",
+                "partnames": [
+                    {"part_name": "CPU", "maker": "Intel"},
+                    {"part_name": "RAM", "maker": "Samsung"}
+                ]
+            },
+            {
+                "item": "Desktop",
+                "partnames": [
+                    {"part_name": "Motherboard", "maker": "ASUS"},
+                    {"part_name": "GPU", "maker": "NVIDIA"}
+                ]
+            }
+        ],
+        "total_items": 2
+    }
+    """
+    # 1. Validate customer exists
     try:
-        # Use filter() instead of get() to handle multiple customers
-        customers = Customer.objects.filter(customer_name=customer_name)
+        customer = Customer.objects.get(customer_name=customer_name)
+    except Customer.DoesNotExist:
+        return JsonResponse({"error": f"Customer '{customer_name}' not found"}, status=404)
+    
+    # 2. Get all items for this customer
+    # Use 'partnames' instead of 'partname_set' for prefetch_related
+    items = Item.objects.filter(customer=customer).prefetch_related('partnames')
+    
+    # 3. Build response data
+    items_data = []
+    for item in items:
+        # Get all parts for this item using 'partnames' (the related_name)
+        parts = item.partnames.all()
+        parts_data = [
+            {
+                "part_name": part.part_name,
+                "maker": part.maker
+            }
+            for part in parts
+        ]
+        
+        items_data.append({
+            "item": item.item,
+            "partnames": parts_data
+        })
+    
+    # 4. Return response
+    return JsonResponse({
+        "status": "success",
+        "customer": customer_name,
+        "items": items_data,
+        "total_items": len(items_data)
+    })
+
+@api.get("/customers", tags=['Customer/Items/Partname'])
+def get_all_customers(request):
+    try:
+        # Get all customers ordered by name
+        customers = Customer.objects.all().order_by('customer_name')
         
         if not customers.exists():
             return JsonResponse({
-                "error": f"Customer '{customer_name}' not found"
-            }, status=404)
+                "message": "No customers found",
+                "customers": []
+            }, status=200)
         
-        # If only one customer found
-        if customers.count() == 1:
-            customer = customers.first()
+        # Prepare response data
+        customers_data = []
+        for customer in customers:
             customer_data = {
                 "customer_name": customer.customer_name,
+                "items_count": customer.items.count(),
                 "items": []
             }
             
-            # Using related_name='items' for reverse relation from Customer to Item
+            # Include item details for each customer
             for item in customer.items.all():
                 item_data = {
                     "item": item.item,
-                    "partnames": []
-                }
-                
-                # Using related_name='partnames' for reverse relation from Item to Partname
-                for partname in item.partnames.all():
-                    partname_data = {
-                        "part_name": partname.part_name,
-                        "maker": partname.maker
-                    }
-                    item_data["partnames"].append(partname_data)
-                
-                customer_data["items"].append(item_data)
-            
-            return JsonResponse(customer_data)
-        
-        # If multiple customers with same name found
-        else:
-            customers_data = []
-            for customer in customers:
-                customer_info = {
-                    "customer_name": customer.customer_name,
-                    "items_count": customer.items.count(),
-                    "items": [
+                    "partnames_count": item.partnames.count(),
+                    "partnames": [
                         {
-                            "item": item.item,
-                            "partnames_count": item.partnames.count()
-                        } for item in customer.items.all()
+                            "part_name": partname.part_name,
+                            "maker": partname.maker
+                        } for partname in item.partnames.all()
                     ]
                 }
-                customers_data.append(customer_info)
+                customer_data["items"].append(item_data)
             
-            return JsonResponse({
-                "message": f"Multiple customers found with name '{customer_name}'",
-                "count": customers.count(),
-                "customers": customers_data,
-                "suggestion": "Please specify more details to identify the correct customer"
-            })
+            customers_data.append(customer_data)
+        
+        return JsonResponse({
+            "total_customers": customers.count(),
+            "customers": customers_data
+        }, status=200)
         
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-
 
 # Get a specific item by its name
 @api.get("/items/{item_name}", tags=['Customer/Items/Partname'])

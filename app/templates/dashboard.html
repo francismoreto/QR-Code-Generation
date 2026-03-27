@@ -52,8 +52,8 @@
             .no-print { display: none !important; }
         }
 
-        /* Customer link hover effect */
-        .customer-link-item:hover {
+        /* Sidebar link hover effects */
+        .customer-link-item:hover, .item-link-item:hover, .material-link-item:hover {
             background: linear-gradient(95deg, rgba(59,130,246,0.08) 0%, rgba(59,130,246,0.02) 100%);
             border-left: 3px solid #3b82f6;
             padding-left: 13px !important;
@@ -89,7 +89,7 @@
     <div class="flex relative">
         <div id="overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="closeSidebar()"></div>
 
-        <!-- Sidebar with CUSTOMER MANAGEMENT added - redirects to /customer/create -->
+        <!-- Sidebar with CUSTOMER MANAGEMENT, ITEM MANAGEMENT & MATERIAL NAME MANAGEMENT (redirect to /material/update) -->
         <div id="sidebar" class="fixed left-0 top-0 h-full w-72 bg-base-100 shadow-2xl z-50 sidebar-transition -translate-x-full lg:translate-x-0 lg:relative lg:top-auto lg:h-[calc(100vh-64px)] lg:z-40 flex flex-col">
             <button onclick="closeSidebar()" class="btn btn-ghost btn-circle absolute right-2 top-2 lg:hidden"><i class="fas fa-times"></i></button>
             <div class="p-6 border-b border-base-200 flex-shrink-0">
@@ -127,14 +127,31 @@
                     </ul>
                 </div>
                 
-                <!-- NEW CUSTOMER MANAGEMENT SECTION - redirects to /customer/create -->
+                <!-- MANAGEMENT Section: Customer + Item + Material Name (separate page /material/update) -->
                 <div class="mb-4 mt-6 border-t border-base-200 pt-4">
-                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">CRM</p>
+                    <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wider px-4 mb-3">MANAGEMENT</p>
                     <ul class="space-y-1">
+                        <!-- Customer Add Link - redirects to /customer/create -->
                         <li>
                             <a href="/customer/create" id="customerLink" class="customer-link-item flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
                                 <i class="fas fa-user-plus w-5 text-primary"></i>
                                 <span>Add Customer</span>
+                                <i class="fas fa-external-link-alt text-xs ml-auto opacity-50"></i>
+                            </a>
+                        </li>
+                        <!-- Item Add Link - redirects to /item/add -->
+                        <li>
+                            <a href="/item/add" id="itemAddLink" class="item-link-item flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-cube w-5 text-secondary"></i>
+                                <span>Add Item</span>
+                                <i class="fas fa-external-link-alt text-xs ml-auto opacity-50"></i>
+                            </a>
+                        </li>
+                        <!-- NEW: Material Name Management Link - redirects to SEPARATE PAGE /material/update -->
+                        <li>
+                            <a href="/material/update" id="materialNameLink" class="material-link-item flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200 transition-all duration-200">
+                                <i class="fas fa-pallet w-5 text-accent"></i>
+                                <span>Material Name</span>
                                 <i class="fas fa-external-link-alt text-xs ml-auto opacity-50"></i>
                             </a>
                         </li>
@@ -184,9 +201,7 @@
                         <h2 class="text-xl font-semibold mb-4">Recent QR Verifications</h2>
                         <div class="overflow-x-auto">
                             <table class="table table-zebra w-full">
-                                <thead>\
-                                    <th>Timestamp</th><th>QR UUID</th><th>User Item</th><th>QR Item</th><th>Status</th><th>Backend Updated</th><th>Result</th>\
-                                </thead>
+                                <thead><tr><th>Timestamp</th><th>QR UUID</th><th>User Item</th><th>QR Item</th><th>Status</th><th>Backend Updated</th><th>Result</th></tr></thead>
                                 <tbody id="verificationHistoryTable">
                                     <tr><td colspan="7" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30 block"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>
                                 </tbody>
@@ -196,7 +211,7 @@
                 </div>
             </div>
 
-            <!-- Generate QR View -->
+            <!-- Generate QR View (with Material Name field) -->
             <div id="generateQrView" class="hidden">
                 <div class="mb-8">
                     <h1 class="text-3xl font-bold text-base-content">Generate QR Code</h1>
@@ -210,6 +225,12 @@
                                 <div><label class="label-text font-medium text-sm block mb-1">Part Name <span class="text-error">*</span></label><input type="text" id="genPartName" placeholder="e.g., CPU, GPU" class="input input-bordered w-full" required></div>
                                 <div><label class="label-text font-medium text-sm block mb-1">Part Maker <span class="text-error">*</span></label><input type="text" id="genPartMaker" placeholder="e.g., Intel, AMD" class="input input-bordered w-full" required></div>
                                 <div><label class="label-text font-medium text-sm block mb-1">Lot Number <span class="text-error">*</span></label><input type="text" id="genLotNo" placeholder="e.g., LOT-2024-001" class="input input-bordered w-full" required></div>
+                                <div><label class="label-text font-medium text-sm block mb-1">Material Name</label>
+                                    <select id="genMaterialName" class="select select-bordered w-full">
+                                        <option value="">Select Material (Optional)</option>
+                                    </select>
+                                    <p class="text-xs text-base-content/50 mt-1">Manage materials at <a href="/material/update" class="link link-primary">/material/update</a></p>
+                                </div>
                             </div>
                             <div id="genQrError" class="text-error text-sm min-h-[24px]"></div>
                             <div id="genQrSuccess" class="text-success text-sm min-h-[24px] hidden"></div>
@@ -239,7 +260,7 @@
                         <div class="flex flex-col sm:flex-row gap-3">
                             <div class="flex-1 relative">
                                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 text-sm"></i>
-                                <input type="text" id="qrListSearch" placeholder="Search item, part, maker, lot, UUID…" class="input input-bordered w-full pl-9 text-sm">
+                                <input type="text" id="qrListSearch" placeholder="Search item, part, maker, lot, material, UUID…" class="input input-bordered w-full pl-9 text-sm">
                             </div>
                             <select id="qrListStatusFilter" class="select select-bordered text-sm w-full sm:w-44">
                                 <option value="">All Statuses</option>
@@ -306,6 +327,7 @@
                 <div><label class="label-text font-medium text-sm block mb-1">Part Name <span class="text-error">*</span></label><input type="text" id="modalPartName" placeholder="e.g., CPU, GPU" class="input input-bordered w-full"></div>
                 <div><label class="label-text font-medium text-sm block mb-1">Part Maker <span class="text-error">*</span></label><input type="text" id="modalPartMaker" placeholder="e.g., Intel, AMD" class="input input-bordered w-full"></div>
                 <div><label class="label-text font-medium text-sm block mb-1">Lot Number <span class="text-error">*</span></label><input type="text" id="modalLotNo" placeholder="e.g., LOT-2024-001" class="input input-bordered w-full"></div>
+                <div><label class="label-text font-medium text-sm block mb-1">Material Name</label><input type="text" id="modalMaterialName" placeholder="e.g., Aluminum, Plastic" class="input input-bordered w-full"></div>
                 <div id="modalInputError" class="text-error text-sm min-h-[24px]"></div>
             </div>
             <div class="modal-action mt-6"><button id="cancelUserInputBtn" class="btn btn-ghost">Cancel</button><button id="confirmUserInputBtn" class="btn btn-primary"><i class="fas fa-camera mr-1"></i> Proceed to Scan QR</button></div>
@@ -339,6 +361,7 @@
                         <span class="text-base-content/60 font-medium">Part</span>       <span id="detailPart"      class="font-semibold"></span>
                         <span class="text-base-content/60 font-medium">Maker</span>      <span id="detailMaker"     class="font-semibold"></span>
                         <span class="text-base-content/60 font-medium">Lot No</span>     <span id="detailLotNo"     class="font-semibold"></span>
+                        <span class="text-base-content/60 font-medium">Material</span>   <span id="detailMaterial"   class="font-semibold"></span>
                         <span class="text-base-content/60 font-medium">UUID</span>       <span id="detailUuid"      class="font-mono text-xs break-all"></span>
                         <span class="text-base-content/60 font-medium">Created</span>    <span id="detailCreatedAt" class="text-xs"></span>
                     </div>
@@ -378,6 +401,32 @@
 
     document.getElementById("logoutBtn")?.addEventListener("click", (e) => { e.preventDefault(); sessionStorage.removeItem("employee"); window.location.href = "/login"; });
 
+    // ==================== MATERIAL NAMES - Load from localStorage (shared with /material/update page) ====================
+    let materialNamesList = [];
+    function loadMaterials() {
+        const stored = localStorage.getItem("materialNames");
+        if(stored) {
+            materialNamesList = JSON.parse(stored);
+        } else {
+            materialNamesList = ["Aluminum 6061", "Stainless Steel", "ABS Plastic", "Copper", "Carbon Fiber"];
+            localStorage.setItem("materialNames", JSON.stringify(materialNamesList));
+        }
+        // Populate select dropdown in Generate QR form
+        const selectEl = document.getElementById("genMaterialName");
+        if(selectEl) {
+            selectEl.innerHTML = '<option value="">Select Material (Optional)</option>' + 
+                materialNamesList.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+        }
+    }
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+    
+    // Listen for storage changes (if material updated in another tab/page)
+    window.addEventListener('storage', (e) => {
+        if(e.key === 'materialNames') {
+            loadMaterials();
+        }
+    });
+    
     // ==================== API CONFIG ====================
     const API_BASE_URL           = "http://127.0.0.1:8000";
     const FULL_API_URL           = API_BASE_URL + "/api/verify/cross-check";
@@ -387,24 +436,21 @@
 
     let html5QrCode = null, isScanning = false, isProcessing = false;
     let scanCount = 0, verifiedCount = 0, verificationHistory = [];
-    let pendingUserInput = { item_name:'', part_name:'', part_maker:'', lot_no:'' };
+    let pendingUserInput = { item_name:'', part_name:'', part_maker:'', lot_no:'', material_name:'' };
     let allQrRecords = [];
     let activeDetailRecord = null;
 
-    function showApiBanner() {
-        document.getElementById('currentApiEndpoint').textContent = FULL_API_URL;
-        document.getElementById('apiConfigBanner').classList.remove('hidden');
-    }
+    function showApiBanner() { document.getElementById('currentApiEndpoint').textContent = FULL_API_URL; document.getElementById('apiConfigBanner').classList.remove('hidden'); }
     document.getElementById('closeApiBanner')?.addEventListener('click', () => document.getElementById('apiConfigBanner').classList.add('hidden'));
 
-    // ==================== CUSTOMER LINK REDIRECT HANDLER - redirects to /customer/create ====================
-    // The link already has href="/customer/create", but we also add a click handler to ensure proper navigation
-    document.getElementById("customerLink")?.addEventListener("click", function(e) {
-        // Allow default navigation to /customer/create
-        // No preventDefault - let it redirect naturally
-        console.log("Redirecting to customer creation page: /customer/create");
+    // ==================== REDIRECT HANDLERS: Customer + Item + Material (separate page) ====================
+    document.getElementById("customerLink")?.addEventListener("click", function(e) { console.log("Redirecting to /customer/create"); });
+    document.getElementById("itemAddLink")?.addEventListener("click", function(e) { console.log("Redirecting to /item/add"); });
+    document.getElementById("materialNameLink")?.addEventListener("click", function(e) { 
+        console.log("Redirecting to separate material management page: /material/update");
+        // Natural redirect to /material/update - no prevent default
     });
-
+    
     // ==================== SCANNER ====================
     async function updateQRStatusInBackend(qrData, isVerified, mismatches) {
         const payload = { qr_uuid: qrData.qr_uuid, verification_status: isVerified?"GOOD":"NO_GOOD", verified_at: new Date().toISOString(), verified_by: currentUser.employee_id||"admin", user_input: pendingUserInput, qr_data: qrData, mismatches: mismatches||[] };
@@ -421,6 +467,7 @@
         if(pendingUserInput.part_name.toLowerCase()!==qrData.part.name.toLowerCase()) m.push(`Part: "${pendingUserInput.part_name}" vs "${qrData.part.name}"`);
         if(pendingUserInput.part_maker.toLowerCase()!==(qrData.part.maker||'').toLowerCase()) m.push(`Maker: "${pendingUserInput.part_maker}" vs "${qrData.part.maker||'N/A'}"`);
         if(pendingUserInput.lot_no.toLowerCase()!==qrData.lot_no.toLowerCase()) m.push(`Lot: "${pendingUserInput.lot_no}" vs "${qrData.lot_no}"`);
+        if(pendingUserInput.material_name && qrData.material_name && pendingUserInput.material_name.toLowerCase() !== qrData.material_name.toLowerCase()) m.push(`Material: "${pendingUserInput.material_name}" vs "${qrData.material_name}"`);
         const ok=m.length===0;
         return {verified:ok,status:ok?"GOOD":"NO_GOOD",mismatches:m,message:ok?"✅ VERIFICATION PASSED!":"❌ VERIFICATION FAILED!"};
     }
@@ -435,17 +482,17 @@
         const rd = document.getElementById("verification-result");
         rd.classList.remove("hidden");
         const ok = result.verified===true;
-        const hl = (a,b) => a===b?'match-highlight':'mismatch-highlight';
-        rd.innerHTML = `<div class="alert alert-${ok?'success':'error'} shadow-lg mb-3"><div><span class="text-2xl">${ok?"✅":"❌"}</span><div><h3 class="font-bold text-lg">Verification ${ok?"PASSED":"FAILED"}</h3><p class="text-sm">${result.message}</p></div></div></div><div class="mt-3 p-3 bg-base-100 rounded-lg border"><div class="space-y-2 text-sm"><div class="${hl(pendingUserInput.item_name.toLowerCase(),qrData.item.toLowerCase())}"><div class="flex justify-between"><span>Item:</span><span>User: "${pendingUserInput.item_name}" | QR: "${qrData.item}"</span></div></div><div class="${hl(pendingUserInput.part_name.toLowerCase(),qrData.part.name.toLowerCase())}"><div class="flex justify-between"><span>Part:</span><span>User: "${pendingUserInput.part_name}" | QR: "${qrData.part.name}"</span></div></div><div class="${hl(pendingUserInput.part_maker.toLowerCase(),(qrData.part.maker||'').toLowerCase())}"><div class="flex justify-between"><span>Maker:</span><span>User: "${pendingUserInput.part_maker}" | QR: "${qrData.part.maker||'N/A'}"</span></div></div><div class="${hl(pendingUserInput.lot_no.toLowerCase(),qrData.lot_no.toLowerCase())}"><div class="flex justify-between"><span>Lot:</span><span>User: "${pendingUserInput.lot_no}" | QR: "${qrData.lot_no}"</span></div></div><div class="mt-2 text-xs"><span class="font-semibold">QR UUID:</span> <code>${qrData.qr_uuid}</code></div></div></div>`;
+        const hl = (a,b) => (a||'').toLowerCase()===(b||'').toLowerCase() ? 'match-highlight' : 'mismatch-highlight';
+        rd.innerHTML = `<div class="alert alert-${ok?'success':'error'} shadow-lg mb-3"><div><span class="text-2xl">${ok?"✅":"❌"}</span><div><h3 class="font-bold text-lg">Verification ${ok?"PASSED":"FAILED"}</h3><p class="text-sm">${result.message}</p></div></div></div><div class="mt-3 p-3 bg-base-100 rounded-lg border"><div class="space-y-2 text-sm"><div class="${hl(pendingUserInput.item_name,qrData.item)}"><div class="flex justify-between"><span>Item:</span><span>User: "${pendingUserInput.item_name}" | QR: "${qrData.item}"</span></div></div><div class="${hl(pendingUserInput.part_name,qrData.part.name)}"><div class="flex justify-between"><span>Part:</span><span>User: "${pendingUserInput.part_name}" | QR: "${qrData.part.name}"</span></div></div><div class="${hl(pendingUserInput.part_maker,qrData.part.maker)}"><div class="flex justify-between"><span>Maker:</span><span>User: "${pendingUserInput.part_maker}" | QR: "${qrData.part.maker||'N/A'}"</span></div></div><div class="${hl(pendingUserInput.lot_no,qrData.lot_no)}"><div class="flex justify-between"><span>Lot:</span><span>User: "${pendingUserInput.lot_no}" | QR: "${qrData.lot_no}"</span></div></div><div class="${hl(pendingUserInput.material_name,qrData.material_name||'')}"><div class="flex justify-between"><span>Material:</span><span>User: "${pendingUserInput.material_name||'N/A'}" | QR: "${qrData.material_name||'N/A'}"</span></div></div><div class="mt-2 text-xs"><span class="font-semibold">QR UUID:</span> <code>${qrData.qr_uuid}</code></div></div></div>`;
         scanCount++; document.getElementById('scanCountDisplay').textContent = scanCount;
         if(ok){verifiedCount++; document.getElementById('verifiedCountDisplay').textContent=verifiedCount;}
         verificationHistory.unshift({timestamp:new Date().toLocaleTimeString(),qr_uuid:qrData.qr_uuid,user_item:pendingUserInput.item_name,qr_item:qrData.item,status:result.status,backend_updated:result.backend_updated?"Yes":"No",verified:ok});
         if(verificationHistory.length>10) verificationHistory.pop();
-        document.getElementById("verificationHistoryTable").innerHTML = verificationHistory.map(v=>`<tr><td class="text-sm">${v.timestamp}</td><td class="text-xs font-mono">${v.qr_uuid.substring(0,8)}...</td><td class="text-sm">${v.user_item}</td><td class="text-sm">${v.qr_item}</td><td><span class="badge badge-soft ${v.status==='GOOD'?'badge-success':'badge-error'}">${v.status}</span></td><td><span class="text-xs ${v.backend_updated==='Yes'?'text-success':'text-warning'}">${v.backend_updated}</span></td><td><span class="text-sm ${v.verified?'text-success':'text-error'}">${v.verified?'✅ PASSED':'❌ FAILED'}</span></td></tr>`).join('');
+        document.getElementById("verificationHistoryTable").innerHTML = verificationHistory.map(v=>`<tr><td class="text-sm">${v.timestamp}<td class="text-xs font-mono">${v.qr_uuid.substring(0,8)}...<td class="text-sm">${v.user_item}<td class="text-sm">${v.qr_item}<td><span class="badge badge-soft ${v.status==='GOOD'?'badge-success':'badge-error'}">${v.status}</span><td><span class="text-xs ${v.backend_updated==='Yes'?'text-success':'text-warning'}">${v.backend_updated}</span><td><span class="text-sm ${v.verified?'text-success':'text-error'}">${v.verified?'✅ PASSED':'❌ FAILED'}</span></tr>`).join('');
     }
 
     function parseQRData(t) {
-        try { const p=JSON.parse(t); const qr_uuid=p.qr_uuid||p.uuid; const item=p.item||p.item_name; let pn='',pm=''; if(p.part){pn=p.part.name;pm=p.part.maker||'';}else{pn=p.part_name||'';pm=p.part_maker||'';} const lot_no=p.lot_no; if(qr_uuid&&item&&pn&&lot_no) return {qr_uuid,item,part:{name:pn,maker:pm},lot_no}; return null; } catch(e){return null;}
+        try { const p=JSON.parse(t); const qr_uuid=p.qr_uuid||p.uuid; const item=p.item||p.item_name; let pn='',pm='',mat=''; if(p.part){pn=p.part.name;pm=p.part.maker||'';}else{pn=p.part_name||'';pm=p.part_maker||'';} const lot_no=p.lot_no; mat = p.material_name || p.material || ''; if(qr_uuid&&item&&pn&&lot_no) return {qr_uuid,item,part:{name:pn,maker:pm},lot_no,material_name:mat}; return null; } catch(e){return null;}
     }
 
     async function onQRCodeScanned(decodedText) {
@@ -477,46 +524,33 @@
     // ==================== QR GENERATION ====================
     document.getElementById("generateQrForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const item=document.getElementById("genItemName").value.trim(), part=document.getElementById("genPartName").value.trim(), maker=document.getElementById("genPartMaker").value.trim(), lot=document.getElementById("genLotNo").value.trim();
+        const item=document.getElementById("genItemName").value.trim(), part=document.getElementById("genPartName").value.trim(), maker=document.getElementById("genPartMaker").value.trim(), lot=document.getElementById("genLotNo").value.trim(), material=document.getElementById("genMaterialName").value.trim();
         const errEl=document.getElementById("genQrError"), sucEl=document.getElementById("genQrSuccess"), resEl=document.getElementById("genQrResult"), btn=document.getElementById("submitGenerateBtn");
-        if(!item||!part||!maker||!lot){errEl.innerText="All fields are required";return;}
+        if(!item||!part||!maker||!lot){errEl.innerText="Item, Part, Maker, Lot are required";return;}
         errEl.innerText=""; sucEl.classList.add("hidden"); resEl.classList.add("hidden"); resEl.innerHTML="";
         btn.disabled=true; btn.innerHTML='<div class="loading-spinner mr-2"></div> Generating...';
         try {
-            const resp = await fetch(GENERATE_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({item_name:item,part_name:part,part_maker:maker,lot_no:lot})});
+            const resp = await fetch(GENERATE_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({item_name:item,part_name:part,part_maker:maker,lot_no:lot,material_name:material})});
             const data = await resp.json();
             if(!resp.ok) throw new Error(data.error||(resp.status===409?"QR already exists":resp.status===404?"Item/part not found":"Generation failed"));
             const qr = data.qr_record;
-            const qrPayload = qr.qr_data ? JSON.stringify(qr.qr_data) : JSON.stringify({qr_uuid:qr.qr_uuid,item:qr.item,part:qr.part,lot_no:qr.lot_no});
+            const qrPayload = JSON.stringify({qr_uuid:qr.qr_uuid,item:qr.item,part:qr.part,lot_no:qr.lot_no,material_name:qr.material_name||material});
             sucEl.innerText="✅ QR Code generated successfully!"; sucEl.classList.remove("hidden"); resEl.classList.remove("hidden");
-            resEl.innerHTML=`<div class="bg-base-200 rounded-xl p-4"><div class="flex flex-col items-center gap-3"><div class="w-full"><div class="grid grid-cols-2 gap-2 text-sm mb-4 p-3 bg-base-100 rounded-lg"><span class="font-semibold">Item:</span><span>${qr.item}</span><span class="font-semibold">Part:</span><span>${qr.part.name}</span><span class="font-semibold">Maker:</span><span>${qr.part.maker}</span><span class="font-semibold">Lot No:</span><span>${qr.lot_no}</span><span class="font-semibold">UUID:</span><span class="font-mono text-xs break-all">${qr.qr_uuid}</span><span class="font-semibold">Status:</span><span class="badge badge-soft badge-warning">${qr.status}</span></div></div><div class="qr-code-container w-full"><div id="qrCodeCanvas" class="qr-preview"></div><div class="text-center mt-1 flex gap-2 flex-wrap justify-center"><button id="downloadQrBtn" class="btn btn-sm btn-primary"><i class="fas fa-download mr-1"></i> Download QR Code</button><button id="copyQrDataBtn" class="btn btn-sm btn-outline"><i class="fas fa-copy mr-1"></i> Copy QR Data</button></div></div></div></div>`;
-            setTimeout(()=>{
-                const c=document.getElementById("qrCodeCanvas"); c.innerHTML="";
-                new QRCode(c,{text:qrPayload,width:216,height:216,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.H});
-                document.getElementById("downloadQrBtn").onclick=()=>{setTimeout(()=>{const cv=c.querySelector("canvas"),im=c.querySelector("img");const a=document.createElement("a");a.download=`QR_${qr.qr_uuid.substring(0,8)}.png`;a.href=cv?cv.toDataURL("image/png"):im.src;a.click();},200);};
-                document.getElementById("copyQrDataBtn").onclick=()=>{navigator.clipboard.writeText(qrPayload);const b=document.getElementById("copyQrDataBtn");b.innerHTML='<i class="fas fa-check mr-1"></i> Copied!';setTimeout(()=>{b.innerHTML='<i class="fas fa-copy mr-1"></i> Copy QR Data';},2000);};
-            },50);
-            ["genItemName","genPartName","genPartMaker","genLotNo"].forEach(id=>document.getElementById(id).value="");
+            resEl.innerHTML=`<div class="bg-base-200 rounded-xl p-4"><div class="flex flex-col items-center gap-3"><div class="w-full"><div class="grid grid-cols-2 gap-2 text-sm mb-4 p-3 bg-base-100 rounded-lg"><span class="font-semibold">Item:</span><span>${qr.item}</span><span class="font-semibold">Part:</span><span>${qr.part.name}</span><span class="font-semibold">Maker:</span><span>${qr.part.maker}</span><span class="font-semibold">Lot No:</span><span>${qr.lot_no}</span><span class="font-semibold">Material:</span><span>${qr.material_name||material||'N/A'}</span><span class="font-semibold">UUID:</span><span class="font-mono text-xs break-all">${qr.qr_uuid}</span></div></div><div class="qr-code-container w-full"><div id="qrCodeCanvas" class="qr-preview"></div><div class="text-center mt-1 flex gap-2 flex-wrap justify-center"><button id="downloadQrBtn" class="btn btn-sm btn-primary"><i class="fas fa-download mr-1"></i> Download QR Code</button><button id="copyQrDataBtn" class="btn btn-sm btn-outline"><i class="fas fa-copy mr-1"></i> Copy QR Data</button></div></div></div></div>`;
+            setTimeout(()=>{ const c=document.getElementById("qrCodeCanvas"); c.innerHTML=""; new QRCode(c,{text:qrPayload,width:216,height:216}); document.getElementById("downloadQrBtn").onclick=()=>{const cv=c.querySelector("canvas"),im=c.querySelector("img");const a=document.createElement("a");a.download=`QR_${qr.qr_uuid.substring(0,8)}.png`;a.href=cv?cv.toDataURL("image/png"):im.src;a.click();}; document.getElementById("copyQrDataBtn").onclick=()=>{navigator.clipboard.writeText(qrPayload);const b=document.getElementById("copyQrDataBtn");b.innerHTML='<i class="fas fa-check mr-1"></i> Copied!';setTimeout(()=>{b.innerHTML='<i class="fas fa-copy mr-1"></i> Copy QR Data';},2000);}; },50);
+            ["genItemName","genPartName","genPartMaker","genLotNo","genMaterialName"].forEach(id=>{const el=document.getElementById(id); if(el && el.tagName==='SELECT') el.value=''; else if(el) el.value='';});
         } catch(err){ errEl.innerText=err.message; resEl.classList.add("hidden"); }
         btn.disabled=false; btn.innerHTML='<i class="fas fa-qrcode mr-2"></i> Generate QR Code';
     });
 
-    // ==================== QR LIST ====================
+    // ==================== QR LIST (with material field) ====================
     function normaliseRecord(r) {
         const p=r.part||{};
-        return { qr_uuid:r.qr_uuid||r.uuid||'', item:r.item||r.item_name||'', part_name:p.name||r.part_name||'', part_maker:p.maker||r.part_maker||'', lot_no:r.lot_no||'', status:(r.status||'PENDING').toUpperCase(), created_at:r.created_at||r.createdAt||'', qr_data:r.qr_data||{qr_uuid:r.qr_uuid,item:r.item,part:p,lot_no:r.lot_no} };
+        return { qr_uuid:r.qr_uuid||r.uuid||'', item:r.item||r.item_name||'', part_name:p.name||r.part_name||'', part_maker:p.maker||r.part_maker||'', lot_no:r.lot_no||'', material_name:r.material_name||r.material||'', status:(r.status||'PENDING').toUpperCase(), created_at:r.created_at||r.createdAt||'', qr_data:r.qr_data||{qr_uuid:r.qr_uuid,item:r.item,part:p,lot_no:r.lot_no,material_name:r.material_name} };
     }
-
-    function updateQrListBadge(n) {
-        const b=document.getElementById('qrListBadge');
-        if(n>0){b.textContent=n>99?'99+':n;b.classList.remove('hidden');}else b.classList.add('hidden');
-    }
-
-    async function fetchQrList() {
-        document.getElementById('qrListGrid').innerHTML='';
-        document.getElementById('qrListLoading').classList.remove('hidden');
-        document.getElementById('qrListEmpty').classList.add('hidden');
-        document.getElementById('qrListError').classList.add('hidden');
+    async function fetchQrList() { /* same as before */ 
+        document.getElementById('qrListGrid').innerHTML=''; document.getElementById('qrListLoading').classList.remove('hidden');
+        document.getElementById('qrListEmpty').classList.add('hidden'); document.getElementById('qrListError').classList.add('hidden');
         try {
             const resp = await fetch(LIST_QR_URL,{method:'GET',headers:{'Content-Type':'application/json'}});
             if(!resp.ok) throw new Error(`Server returned ${resp.status}`);
@@ -525,215 +559,60 @@
             allQrRecords = records.map(normaliseRecord);
             document.getElementById('qrListLoading').classList.add('hidden');
             renderQrList();
-            updateQrListBadge(allQrRecords.length);
+            const badge=document.getElementById('qrListBadge'); if(badge){badge.textContent=allQrRecords.length>0?Math.min(allQrRecords.length,99).toString():''; badge.classList.toggle('hidden',allQrRecords.length===0);}
         } catch(err) {
             document.getElementById('qrListLoading').classList.add('hidden');
             document.getElementById('qrListError').classList.remove('hidden');
             document.getElementById('qrListErrorMsg').textContent = err.message||'Could not connect to backend.';
         }
     }
-
     function getFilteredRecords() {
         const search=(document.getElementById('qrListSearch')?.value||'').toLowerCase().trim();
         const sf=document.getElementById('qrListStatusFilter')?.value||'';
         const sort=document.getElementById('qrListSortBy')?.value||'newest';
-        let f=allQrRecords.filter(r=>{
-            const ms=!search||[r.item,r.part_name,r.part_maker,r.lot_no,r.qr_uuid].some(v=>v.toLowerCase().includes(search));
-            const mf=!sf||r.status===sf;
-            return ms&&mf;
-        });
-        f.sort((a,b)=>{
-            if(sort==='newest') return new Date(b.created_at||0)-new Date(a.created_at||0);
-            if(sort==='oldest') return new Date(a.created_at||0)-new Date(b.created_at||0);
-            if(sort==='item')   return a.item.localeCompare(b.item);
-            if(sort==='status') return a.status.localeCompare(b.status);
-            return 0;
-        });
+        let f=allQrRecords.filter(r=>{ const ms=!search||[r.item,r.part_name,r.part_maker,r.lot_no,r.material_name,r.qr_uuid].some(v=>v.toLowerCase().includes(search)); const mf=!sf||r.status===sf; return ms&&mf; });
+        f.sort((a,b)=>{ if(sort==='newest') return new Date(b.created_at||0)-new Date(a.created_at||0); if(sort==='oldest') return new Date(a.created_at||0)-new Date(b.created_at||0); if(sort==='item') return a.item.localeCompare(b.item); if(sort==='status') return a.status.localeCompare(b.status); return 0; });
         return f;
     }
-
-    function statusBadgeHtml(status) {
-        const map={GOOD:{cls:'status-badge-good',icon:'✅',label:'GOOD'},NO_GOOD:{cls:'status-badge-nogood',icon:'❌',label:'NO GOOD'},PENDING:{cls:'status-badge-pending',icon:'⏳',label:'PENDING'}};
-        const s=map[status]||map['PENDING'];
-        return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}">${s.icon} ${s.label}</span>`;
-    }
-
-    function renderQrList() {
-        const filtered=getFilteredRecords();
-        const grid=document.getElementById('qrListGrid');
-        document.getElementById('statTotal').textContent   = allQrRecords.length;
-        document.getElementById('statGood').textContent    = allQrRecords.filter(r=>r.status==='GOOD').length;
-        document.getElementById('statNoGood').textContent  = allQrRecords.filter(r=>r.status==='NO_GOOD').length;
-        document.getElementById('statPending').textContent = allQrRecords.filter(r=>r.status==='PENDING').length;
-        if(filtered.length===0){grid.innerHTML='';document.getElementById('qrListEmpty').classList.remove('hidden');return;}
-        document.getElementById('qrListEmpty').classList.add('hidden');
-        grid.innerHTML = filtered.map(r=>`
-            <div class="qr-list-card" onclick="openQrDetail('${r.qr_uuid}')">
-                <div class="flex items-start gap-3">
-                    <div class="mini-qr" id="mini-${r.qr_uuid.replace(/-/g,'')}"></div>
-                    <div class="flex-1 min-w-0">
-                        <p class="font-bold text-sm text-base-content truncate">${r.item}</p>
-                        <p class="text-xs text-base-content/60 truncate">${r.part_name} · ${r.part_maker}</p>
-                        <p class="text-xs text-base-content/50 mt-0.5">Lot: ${r.lot_no}</p>
-                        <div class="mt-2 flex items-center justify-between gap-1">
-                            ${statusBadgeHtml(r.status)}
-                            <span class="text-xs text-base-content/30 font-mono">${r.qr_uuid.substring(0,8)}…</span>
-                        </div>
-                    </div>
-                </div>
-            </div>`).join('');
-        setTimeout(()=>{
-            filtered.forEach(r=>{
-                const el=document.getElementById(`mini-${r.qr_uuid.replace(/-/g,'')}`);
-                if(!el||el.dataset.rendered) return;
-                el.dataset.rendered='1';
-                try{ new QRCode(el,{text:JSON.stringify(r.qr_data),width:76,height:76,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
-            });
-        },60);
-    }
-
-    // QR Detail Modal
-    function openQrDetail(uuid) {
-        const r=allQrRecords.find(x=>x.qr_uuid===uuid);
-        if(!r) return;
-        activeDetailRecord=r;
-        document.getElementById('detailItem').textContent      = r.item;
-        document.getElementById('detailPart').textContent      = r.part_name;
-        document.getElementById('detailMaker').textContent     = r.part_maker;
-        document.getElementById('detailLotNo').textContent     = r.lot_no;
-        document.getElementById('detailUuid').textContent      = r.qr_uuid;
-        document.getElementById('detailCreatedAt').textContent = r.created_at?new Date(r.created_at).toLocaleString():'N/A';
-        document.getElementById('detailStatusBadge').innerHTML = statusBadgeHtml(r.status);
-        const c=document.getElementById('detailQrCanvas'); c.innerHTML='';
-        setTimeout(()=>{ try{new QRCode(c,{text:JSON.stringify(r.qr_data),width:176,height:176,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.H});}catch(e){} },40);
-        document.getElementById('qrDetailModal').showModal();
-    }
-
-    document.getElementById('detailDownloadBtn')?.addEventListener('click',()=>{
-        if(!activeDetailRecord) return;
-        setTimeout(()=>{
-            const c=document.getElementById('detailQrCanvas');
-            const cv=c.querySelector('canvas'), im=c.querySelector('img');
-            const a=document.createElement('a'); a.download=`QR_${activeDetailRecord.qr_uuid.substring(0,8)}.png`;
-            a.href=cv?cv.toDataURL('image/png'):im?.src||''; a.click();
-        },150);
-    });
-
-    document.getElementById('detailPrintBtn')?.addEventListener('click',()=>{
-        if(!activeDetailRecord) return;
-        const r=activeDetailRecord;
-        const c=document.getElementById('detailQrCanvas').querySelector('canvas');
-        const img=c?c.toDataURL('image/png'):'';
-        const pa=document.getElementById('printArea'); pa.style.display='block';
-        pa.innerHTML=`<div style="font-family:sans-serif;padding:32px;text-align:center;max-width:380px;margin:0 auto;border:2px solid #e2e8f0;border-radius:16px;">
-            <h2 style="font-size:18px;font-weight:700;margin-bottom:4px;">${r.item}</h2>
-            <p style="color:#64748b;font-size:13px;margin-bottom:16px;">${r.part_name} · ${r.part_maker}</p>
-            ${img?`<img src="${img}" style="width:200px;height:200px;margin:0 auto 16px;display:block;border:1px solid #e2e8f0;border-radius:8px;padding:8px;">`:'' }
-            <div style="background:#f8fafc;border-radius:8px;padding:12px;font-size:13px;text-align:left;">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <span style="color:#64748b;">Lot No</span><span style="font-weight:600;">${r.lot_no}</span>
-                    <span style="color:#64748b;">Status</span><span style="font-weight:600;">${r.status}</span>
-                    <span style="color:#64748b;">UUID</span><span style="font-family:monospace;font-size:10px;">${r.qr_uuid}</span>
-                </div>
-            </div></div>`;
-        setTimeout(()=>{window.print();pa.style.display='none';pa.innerHTML='';},200);
-    });
-
-    document.getElementById('detailCopyDataBtn')?.addEventListener('click',()=>{
-        if(!activeDetailRecord) return;
-        navigator.clipboard.writeText(JSON.stringify(activeDetailRecord.qr_data,null,2));
-        const b=document.getElementById('detailCopyDataBtn'); b.innerHTML='<i class="fas fa-check"></i> Copied!';
-        setTimeout(()=>{b.innerHTML='<i class="fas fa-copy"></i> Copy QR Data';},2000);
-    });
-
-    document.getElementById('refreshQrListBtn')?.addEventListener('click', fetchQrList);
-    document.getElementById('retryQrListBtn')?.addEventListener('click', fetchQrList);
-
-    document.getElementById('printAllQrBtn')?.addEventListener('click',()=>{
-        const filtered=getFilteredRecords();
-        if(filtered.length===0){alert('No QR codes to print.');return;}
-        const pa=document.getElementById('printArea'); pa.style.display='block';
-        const cards=filtered.map(r=>{
-            const el=document.getElementById(`mini-${r.qr_uuid.replace(/-/g,'')}`);
-            const cv=el?el.querySelector('canvas'):null;
-            const src=cv?cv.toDataURL('image/png'):'';
-            return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;break-inside:avoid;">
-                ${src?`<img src="${src}" style="width:120px;height:120px;margin:0 auto 8px;display:block;border:1px solid #e2e8f0;border-radius:6px;padding:4px;">`:
-                      `<div style="width:120px;height:120px;background:#f1f5f9;border-radius:6px;margin:0 auto 8px;"></div>`}
-                <p style="font-weight:700;font-size:13px;margin:0 0 2px;">${r.item}</p>
-                <p style="color:#64748b;font-size:11px;margin:0 0 4px;">${r.part_name} · ${r.part_maker}</p>
-                <p style="font-size:11px;color:#475569;">Lot: ${r.lot_no}</p>
-                <p style="font-family:monospace;font-size:9px;color:#94a3b8;margin-top:4px;">${r.qr_uuid.substring(0,16)}…</p>
-            </div>`;
-        }).join('');
-        pa.innerHTML=`<div style="font-family:sans-serif;padding:16px;"><h1 style="font-size:20px;font-weight:700;margin-bottom:16px;text-align:center;">QR Code List (${filtered.length} records)</h1><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">${cards}</div></div>`;
-        setTimeout(()=>{window.print();pa.style.display='none';pa.innerHTML='';},300);
-    });
-
-    ['qrListSearch','qrListStatusFilter','qrListSortBy'].forEach(id=>{
-        document.getElementById(id)?.addEventListener('input',  renderQrList);
-        document.getElementById(id)?.addEventListener('change', renderQrList);
-    });
+    function statusBadgeHtml(status) { const map={GOOD:{cls:'status-badge-good',icon:'✅',label:'GOOD'},NO_GOOD:{cls:'status-badge-nogood',icon:'❌',label:'NO GOOD'},PENDING:{cls:'status-badge-pending',icon:'⏳',label:'PENDING'}}; const s=map[status]||map['PENDING']; return `<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${s.cls}">${s.icon} ${s.label}</span>`; }
+    function renderQrList() { const filtered=getFilteredRecords(); const grid=document.getElementById('qrListGrid'); document.getElementById('statTotal').textContent=allQrRecords.length; document.getElementById('statGood').textContent=allQrRecords.filter(r=>r.status==='GOOD').length; document.getElementById('statNoGood').textContent=allQrRecords.filter(r=>r.status==='NO_GOOD').length; document.getElementById('statPending').textContent=allQrRecords.filter(r=>r.status==='PENDING').length; if(filtered.length===0){grid.innerHTML='';document.getElementById('qrListEmpty').classList.remove('hidden');return;} document.getElementById('qrListEmpty').classList.add('hidden'); grid.innerHTML = filtered.map(r=>`<div class="qr-list-card" onclick="openQrDetail('${r.qr_uuid}')"><div class="flex items-start gap-3"><div class="mini-qr" id="mini-${r.qr_uuid.replace(/-/g,'')}"></div><div class="flex-1 min-w-0"><p class="font-bold text-sm text-base-content truncate">${r.item}</p><p class="text-xs text-base-content/60 truncate">${r.part_name} · ${r.part_maker}</p><p class="text-xs text-base-content/50 mt-0.5">Lot: ${r.lot_no} ${r.material_name?`· ${r.material_name}`:''}</p><div class="mt-2 flex items-center justify-between gap-1">${statusBadgeHtml(r.status)}<span class="text-xs text-base-content/30 font-mono">${r.qr_uuid.substring(0,8)}…</span></div></div></div></div>`).join(''); setTimeout(()=>{ filtered.forEach(r=>{ const el=document.getElementById(`mini-${r.qr_uuid.replace(/-/g,'')}`); if(!el||el.dataset.rendered) return; el.dataset.rendered='1'; try{ new QRCode(el,{text:JSON.stringify(r.qr_data),width:76,height:76}); }catch(e){} }); },60); }
+    function openQrDetail(uuid) { const r=allQrRecords.find(x=>x.qr_uuid===uuid); if(!r) return; activeDetailRecord=r; document.getElementById('detailItem').textContent=r.item; document.getElementById('detailPart').textContent=r.part_name; document.getElementById('detailMaker').textContent=r.part_maker; document.getElementById('detailLotNo').textContent=r.lot_no; document.getElementById('detailMaterial').textContent=r.material_name||'N/A'; document.getElementById('detailUuid').textContent=r.qr_uuid; document.getElementById('detailCreatedAt').textContent=r.created_at?new Date(r.created_at).toLocaleString():'N/A'; document.getElementById('detailStatusBadge').innerHTML=statusBadgeHtml(r.status); const c=document.getElementById('detailQrCanvas'); c.innerHTML=''; setTimeout(()=>{ try{new QRCode(c,{text:JSON.stringify(r.qr_data),width:176,height:176});}catch(e){} },40); document.getElementById('qrDetailModal').showModal(); }
+    document.getElementById('detailDownloadBtn')?.addEventListener('click',()=>{ if(!activeDetailRecord) return; setTimeout(()=>{ const c=document.getElementById('detailQrCanvas'); const cv=c.querySelector('canvas'), im=c.querySelector('img'); const a=document.createElement('a'); a.download=`QR_${activeDetailRecord.qr_uuid.substring(0,8)}.png`; a.href=cv?cv.toDataURL('image/png'):im?.src||''; a.click(); },150); });
+    document.getElementById('detailPrintBtn')?.addEventListener('click',()=>{ if(!activeDetailRecord) return; const r=activeDetailRecord; const c=document.getElementById('detailQrCanvas').querySelector('canvas'); const img=c?c.toDataURL('image/png'):''; const pa=document.getElementById('printArea'); pa.style.display='block'; pa.innerHTML=`<div style="font-family:sans-serif;padding:32px;text-align:center;max-width:380px;margin:0 auto;border:2px solid #e2e8f0;border-radius:16px;"><h2>${r.item}</h2><p>${r.part_name} · ${r.part_maker}</p>${img?`<img src="${img}" style="width:200px;height:200px;margin:0 auto;">`:''}<div><p>Lot: ${r.lot_no}</p><p>Material: ${r.material_name||'N/A'}</p><p>Status: ${r.status}</p><p>UUID: ${r.qr_uuid}</p></div></div>`; setTimeout(()=>{window.print();pa.style.display='none';pa.innerHTML='';},200); });
+    document.getElementById('detailCopyDataBtn')?.addEventListener('click',()=>{ if(!activeDetailRecord) return; navigator.clipboard.writeText(JSON.stringify(activeDetailRecord.qr_data,null,2)); const b=document.getElementById('detailCopyDataBtn'); b.innerHTML='<i class="fas fa-check"></i> Copied!'; setTimeout(()=>{b.innerHTML='<i class="fas fa-copy"></i> Copy QR Data';},2000); });
+    document.getElementById('refreshQrListBtn')?.addEventListener('click', fetchQrList); document.getElementById('retryQrListBtn')?.addEventListener('click', fetchQrList);
+    document.getElementById('printAllQrBtn')?.addEventListener('click',()=>{ const filtered=getFilteredRecords(); if(filtered.length===0){alert('No QR codes to print.');return;} const pa=document.getElementById('printArea'); pa.style.display='block'; const cards=filtered.map(r=>`<div style="border:1px solid #e2e8f0;border-radius:12px;padding:12px;text-align:center;break-inside:avoid;"><p><strong>${r.item}</strong><br>${r.part_name}<br>Lot: ${r.lot_no}<br>Mat: ${r.material_name||'N/A'}</p></div>`).join(''); pa.innerHTML=`<div><h1>QR List</h1>${cards}</div>`; setTimeout(()=>{window.print();pa.style.display='none';pa.innerHTML='';},300); });
+    ['qrListSearch','qrListStatusFilter','qrListSortBy'].forEach(id=>{ document.getElementById(id)?.addEventListener('input', renderQrList); document.getElementById(id)?.addEventListener('change', renderQrList); });
 
     // ==================== NAVIGATION ====================
     const VIEWS = ['dashboardView','generateQrView','qrListView'];
     const LINKS = ['dashboardLink','generateQrLink','qrListLink'];
     const BASE_LINK_CLS   = 'flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200';
     const ACTIVE_LINK_CLS = 'flex items-center gap-3 px-4 py-3 rounded-lg bg-primary text-primary-content font-medium';
-
-    function setActiveView(viewId, linkId) {
-        VIEWS.forEach(v=>document.getElementById(v)?.classList.add('hidden'));
-        document.getElementById(viewId)?.classList.remove('hidden');
-        LINKS.forEach(l=>{ const el=document.getElementById(l); if(el)el.className=BASE_LINK_CLS; });
-        const al=document.getElementById(linkId);
-        if(al){ al.className=ACTIVE_LINK_CLS; const b=document.getElementById('qrListBadge'); if(b)al.appendChild(b); }
-    }
-
-    function openUserInputModal() {
-        ['modalItemName','modalPartName','modalPartMaker','modalLotNo'].forEach(id=>{document.getElementById(id).value='';});
-        document.getElementById("modalInputError").innerText="";
-        document.getElementById("userInputModal").showModal();
-    }
+    function setActiveView(viewId, linkId) { VIEWS.forEach(v=>document.getElementById(v)?.classList.add('hidden')); document.getElementById(viewId)?.classList.remove('hidden'); LINKS.forEach(l=>{ const el=document.getElementById(l); if(el)el.className=BASE_LINK_CLS; }); const al=document.getElementById(linkId); if(al){ al.className=ACTIVE_LINK_CLS; const b=document.getElementById('qrListBadge'); if(b)al.appendChild(b); } }
+    function openUserInputModal() { ['modalItemName','modalPartName','modalPartMaker','modalLotNo','modalMaterialName'].forEach(id=>{document.getElementById(id).value='';}); document.getElementById("modalInputError").innerText=""; document.getElementById("userInputModal").showModal(); }
     function closeUserInputModal(){document.getElementById("userInputModal").close();}
-    function onConfirmUserInput(){
-        const item=document.getElementById("modalItemName").value.trim(), part=document.getElementById("modalPartName").value.trim(), maker=document.getElementById("modalPartMaker").value.trim(), lot=document.getElementById("modalLotNo").value.trim();
-        if(!item||!part||!maker||!lot){document.getElementById("modalInputError").innerText="All fields are required";return;}
-        pendingUserInput={item_name:item,part_name:part,part_maker:maker,lot_no:lot};
-        closeUserInputModal();
-        document.getElementById("summaryDetails").innerHTML=`<span class="font-semibold">Item:</span><span>${item}</span><span class="font-semibold">Part:</span><span>${part}</span><span class="font-semibold">Maker:</span><span>${maker}</span><span class="font-semibold">Lot:</span><span>${lot}</span>`;
-        document.getElementById("qrScannerModal").showModal();
-        setTimeout(()=>startQrScanner(),200);
-    }
+    function onConfirmUserInput(){ const item=document.getElementById("modalItemName").value.trim(), part=document.getElementById("modalPartName").value.trim(), maker=document.getElementById("modalPartMaker").value.trim(), lot=document.getElementById("modalLotNo").value.trim(), mat=document.getElementById("modalMaterialName").value.trim(); if(!item||!part||!maker||!lot){document.getElementById("modalInputError").innerText="Item, Part, Maker, Lot are required";return;} pendingUserInput={item_name:item,part_name:part,part_maker:maker,lot_no:lot,material_name:mat}; closeUserInputModal(); document.getElementById("summaryDetails").innerHTML=`<span class="font-semibold">Item:</span><span>${item}</span><span class="font-semibold">Part:</span><span>${part}</span><span class="font-semibold">Maker:</span><span>${maker}</span><span class="font-semibold">Lot:</span><span>${lot}</span><span class="font-semibold">Material:</span><span>${mat||'N/A'}</span>`; document.getElementById("qrScannerModal").showModal(); setTimeout(()=>startQrScanner(),200); }
     function closeQRModal(){stopQrScanner();document.getElementById("qrScannerModal").close();document.getElementById("verification-result").classList.add("hidden");document.getElementById("scan-status").classList.add("hidden");isProcessing=false;}
-
-    document.getElementById("dashboardLink") ?.addEventListener("click", e=>{e.preventDefault();setActiveView('dashboardView','dashboardLink');closeSidebar();});
-    document.getElementById("generateQrLink")?.addEventListener("click", e=>{e.preventDefault();setActiveView('generateQrView','generateQrLink');closeSidebar();});
-    document.getElementById("qrVerifyLink")  ?.addEventListener("click", e=>{e.preventDefault();openUserInputModal();closeSidebar();});
-    document.getElementById("logsLink")      ?.addEventListener("click", e=>{e.preventDefault();alert("Verification logs can be viewed in Dashboard table");});
-    document.getElementById("qrListLink")    ?.addEventListener("click", e=>{e.preventDefault();setActiveView('qrListView','qrListLink');fetchQrList();closeSidebar();});
-    document.getElementById("inventoryLink") ?.addEventListener("click", e=>{e.preventDefault();alert("Inventory module coming soon");});
+    document.getElementById("dashboardLink")?.addEventListener("click", e=>{e.preventDefault();setActiveView('dashboardView','dashboardLink');closeSidebar();});
+    document.getElementById("generateQrLink")?.addEventListener("click", e=>{e.preventDefault();setActiveView('generateQrView','generateQrLink');loadMaterials();closeSidebar();});
+    document.getElementById("qrVerifyLink")?.addEventListener("click", e=>{e.preventDefault();openUserInputModal();closeSidebar();});
+    document.getElementById("logsLink")?.addEventListener("click", e=>{e.preventDefault();alert("Verification logs can be viewed in Dashboard table");});
+    document.getElementById("qrListLink")?.addEventListener("click", e=>{e.preventDefault();setActiveView('qrListView','qrListLink');fetchQrList();closeSidebar();});
+    document.getElementById("inventoryLink")?.addEventListener("click", e=>{e.preventDefault();alert("Inventory module coming soon");});
     document.getElementById("confirmUserInputBtn")?.addEventListener("click", onConfirmUserInput);
-    document.getElementById("cancelUserInputBtn") ?.addEventListener("click", closeUserInputModal);
-    document.getElementById("restartScannerBtn")  ?.addEventListener("click", ()=>{if(document.getElementById("qrScannerModal").open)restartScanner();});
-    document.getElementById("stopScannerBtn")     ?.addEventListener("click", ()=>{if(document.getElementById("qrScannerModal").open)stopQrScanner();});
-    document.getElementById("qrScannerModal")     ?.addEventListener("close", ()=>stopQrScanner());
-
-    function toggleSidebar(){
-        const s=document.getElementById('sidebar'),o=document.getElementById('overlay');
-        if(window.innerWidth<1024){if(s.classList.contains('-translate-x-full')){s.classList.remove('-translate-x-full');o.classList.remove('hidden');}else{s.classList.add('-translate-x-full');o.classList.add('hidden');}}
-    }
-    function closeSidebar(){
-        const s=document.getElementById('sidebar'),o=document.getElementById('overlay');
-        if(window.innerWidth<1024){s.classList.add('-translate-x-full');o.classList.add('hidden');}
-    }
+    document.getElementById("cancelUserInputBtn")?.addEventListener("click", closeUserInputModal);
+    document.getElementById("restartScannerBtn")?.addEventListener("click", ()=>{if(document.getElementById("qrScannerModal").open)restartScanner();});
+    document.getElementById("stopScannerBtn")?.addEventListener("click", ()=>{if(document.getElementById("qrScannerModal").open)stopQrScanner();});
+    document.getElementById("qrScannerModal")?.addEventListener("close", ()=>stopQrScanner());
+    function toggleSidebar(){ const s=document.getElementById('sidebar'),o=document.getElementById('overlay'); if(window.innerWidth<1024){if(s.classList.contains('-translate-x-full')){s.classList.remove('-translate-x-full');o.classList.remove('hidden');}else{s.classList.add('-translate-x-full');o.classList.add('hidden');}} }
+    function closeSidebar(){ const s=document.getElementById('sidebar'),o=document.getElementById('overlay'); if(window.innerWidth<1024){s.classList.add('-translate-x-full');o.classList.add('hidden');} }
     document.getElementById('menuBtn')?.addEventListener('click',toggleSidebar);
-    window.addEventListener('resize',()=>{
-        const s=document.getElementById('sidebar'),o=document.getElementById('overlay');
-        if(window.innerWidth>=1024){s.classList.remove('-translate-x-full');o.classList.add('hidden');}
-        else{s.classList.add('-translate-x-full');o.classList.add('hidden');}
-    });
-
-    console.log('QR System Ready — Customer link redirects to /customer/create');
+    window.addEventListener('resize',()=>{ const s=document.getElementById('sidebar'),o=document.getElementById('overlay'); if(window.innerWidth>=1024){s.classList.remove('-translate-x-full');o.classList.add('hidden');} else{s.classList.add('-translate-x-full');o.classList.add('hidden');} });
+    
+    // Initialize materials and QR list badge
+    loadMaterials();
+    console.log('QR System Ready — Material Name Management at separate page: /material/update');
     </script>
 </body>
 </html>

@@ -37,9 +37,13 @@ def login(request):
     return render(request, 'login.html')
 
 def dashboard(request):
-    # Render the form for updating product
     return render(request, 'dashboard.html')
 
 def customer_create(request):
-    # Render the form for updating product
     return render(request, 'customer_create.html')
+
+def item_add(request):
+    return render(request, 'item_create.html')
+
+def material_update(request):
+    return render(request, 'material_update.html')
