@@ -154,7 +154,44 @@ class QRCode(models.Model):
         }
 
 
+class VerificationLog(models.Model):
+    """Model for storing QR verification logs"""
     
+    # Verification result choices
+    class Result(models.TextChoices):
+        GOOD = 'GOOD', 'Good'
+        NO_GOOD = 'NO_GOOD', 'No Good'
+    
+    # QR information
+    qr_uuid = models.UUIDField()
+    qr_item = models.CharField(max_length=255)
+    qr_part = models.CharField(max_length=255, blank=True, null=True)
+    
+    # User input
+    user_item = models.CharField(max_length=255)
+    user_part = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Verification details
+    status = models.CharField(max_length=20, choices=Result.choices)
+    result = models.CharField(max_length=20, choices=Result.choices)
+    backend_updated = models.BooleanField(default=False)
+    
+    # Metadata
+    timestamp = models.DateTimeField(auto_now_add=True)
+    verified_by = models.CharField(max_length=255, blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['qr_uuid']),
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['status']),
+            models.Index(fields=['result']),
+        ]
+    
+    def __str__(self):
+        return f"VerificationLog-{self.id}: {self.qr_uuid} - {self.result}"
+
 
 '''
     @api.post("/item/{itemcode}/process/", tags=['UPDATE PROCESS'])

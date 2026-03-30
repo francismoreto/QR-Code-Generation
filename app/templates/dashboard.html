@@ -51,6 +51,38 @@
             #printArea { position: fixed; left: 0; top: 0; width: 100%; }
             .no-print { display: none !important; }
         }
+        
+        /* Real-time notification */
+        .toast-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease-out;
+        }
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        /* Table row highlight animation */
+        .new-row {
+            animation: highlightRow 1s ease-out;
+        }
+        @keyframes highlightRow {
+            0% {
+                background-color: rgba(34, 197, 94, 0.3);
+            }
+            100% {
+                background-color: transparent;
+            }
+        }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
@@ -109,7 +141,6 @@
                     <ul class="space-y-1">
                         <li><a href="#" id="generateQrLink" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-qrcode w-5"></i><span>Generate QR</span></a></li>
                         <li><a href="#" id="qrVerifyLink"   class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-camera w-5"></i><span>QR Verify</span></a></li>
-                        <li><a href="#" id="logsLink"       class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200"><i class="fas fa-history w-5"></i><span>Verification Logs</span></a></li>
                         <li>
                             <a href="#" id="qrListLink" class="flex items-center gap-3 px-4 py-3 rounded-lg text-base-content/70 hover:bg-base-200">
                                 <i class="fas fa-list-alt w-5"></i>
@@ -153,19 +184,39 @@
                         </div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Total Items</p><p class="text-3xl font-bold text-base-content mt-1">1,284</p></div><div class="bg-primary/10 p-4 rounded-2xl"><i class="fas fa-box text-2xl text-primary"></i></div></div></div></div>
-                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Today's Scans</p><p id="scanCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-secondary/10 p-4 rounded-2xl"><i class="fas fa-camera text-2xl text-secondary"></i></div></div></div></div>
-                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Verified Items</p><p id="verifiedCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-success/10 p-4 rounded-2xl"><i class="fas fa-check-circle text-2xl text-success"></i></div></div></div></div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Total QR Codes</p><p class="text-3xl font-bold text-base-content mt-1" id="totalQrCount">0</p></div><div class="bg-primary/10 p-4 rounded-2xl"><i class="fas fa-qrcode text-2xl text-primary"></i></div></div></div></div>
+                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Total Scans</p><p id="scanCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-secondary/10 p-4 rounded-2xl"><i class="fas fa-camera text-2xl text-secondary"></i></div></div></div></div>
+                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">Good Scans</p><p id="verifiedCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-success/10 p-4 rounded-2xl"><i class="fas fa-check-circle text-2xl text-success"></i></div></div></div></div>
+                    <div class="card bg-base-100 shadow-xl"><div class="card-body p-6"><div class="flex items-center justify-between"><div><p class="text-base-content/70 text-sm font-medium">No Good Scans</p><p id="nogoodCountDisplay" class="text-3xl font-bold text-base-content mt-1">0</p></div><div class="bg-error/10 p-4 rounded-2xl"><i class="fas fa-times-circle text-2xl text-error"></i></div></div></div></div>
                 </div>
                 <div class="card bg-base-100 shadow-xl">
                     <div class="card-body">
-                        <h2 class="text-xl font-semibold mb-4">Recent QR Verifications</h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Recent QR Verifications</h2>
+                            <button id="refreshLogsBtn" class="btn btn-outline btn-sm gap-2">
+                                <i class="fas fa-sync-alt"></i> Refresh Logs
+                            </button>
+                        </div>
                         <div class="overflow-x-auto">
                             <table class="table table-zebra w-full">
-                                <thead><tr><th>Timestamp</th><th>QR UUID</th><th>User Item</th><th>QR Item</th><th>Status</th><th>Backend Updated</th><th>Result</th></tr></thead>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>QR ID</th>
+                                        <th>Part Name</th>
+                                        <th>Item Name</th>
+                                        <th>Status</th>
+                                        <th>Result</th>
+                                        <th>Verified By</th>
+                                    </thead>
                                 <tbody id="verificationHistoryTable">
-                                    <tr><td colspan="7" class="text-center py-8 text-base-content/50"><i class="fas fa-qrcode text-4xl mb-2 opacity-30 block"></i><p>No verifications yet. Scan a QR code to get started.</p></td></tr>
+                                    <tr>
+                                        <td colspan="7" class="text-center py-8 text-base-content/50">
+                                            <i class="fas fa-qrcode text-4xl mb-2 opacity-30 block"></i>
+                                            <p>No verifications yet. Scan a QR code to get started.</p>
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -273,6 +324,9 @@
         </div>
     </div>
 
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast toast-end z-[100]"></div>
+
     <!-- ===== USER INPUT MODAL ===== -->
     <dialog id="userInputModal" class="modal modal-bottom sm:modal-middle">
         <div class="modal-box rounded-2xl max-w-md">
@@ -364,12 +418,28 @@
     const UPDATE_STATUS_URL      = API_BASE_URL + "/api/verify/update-status";
     const GENERATE_API_URL       = API_BASE_URL + "/api/qr/generate";
     const LIST_QR_URL            = API_BASE_URL + "/api/qr/list";
+    const VERIFICATION_LOGS_URL  = API_BASE_URL + "/api/verification/logs";
 
     let html5QrCode = null, isScanning = false, isProcessing = false;
-    let scanCount = 0, verifiedCount = 0, verificationHistory = [];
+    let scanCount = 0, verifiedCount = 0, nogoodCount = 0;
     let pendingUserInput = { item_name:'', part_name:'', part_maker:'', lot_no:'' };
     let allQrRecords = [];
     let activeDetailRecord = null;
+    let verificationHistory = [];
+
+    function showToast(message, type = 'success') {
+        const toastContainer = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} shadow-lg`;
+        toast.innerHTML = `
+            <div>
+                <span>${type === 'success' ? '✅' : '❌'}</span>
+                <span>${message}</span>
+            </div>
+        `;
+        toastContainer.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
 
     function showApiBanner() {
         document.getElementById('currentApiEndpoint').textContent = FULL_API_URL;
@@ -379,12 +449,29 @@
 
     // ==================== SCANNER ====================
     async function updateQRStatusInBackend(qrData, isVerified, mismatches) {
-        const payload = { qr_uuid: qrData.qr_uuid, verification_status: isVerified?"GOOD":"NO_GOOD", verified_at: new Date().toISOString(), verified_by: currentUser.employee_id||"admin", user_input: pendingUserInput, qr_data: qrData, mismatches: mismatches||[] };
+        const payload = { 
+            qr_uuid: qrData.qr_uuid, 
+            verification_status: isVerified?"GOOD":"NO_GOOD", 
+            verified_at: new Date().toISOString(), 
+            verified_by: currentUser.employee_id||"admin", 
+            user_input: pendingUserInput, 
+            qr_data: qrData, 
+            mismatches: mismatches||[] 
+        };
+        
         for (const ep of [UPDATE_STATUS_URL, `${API_BASE_URL}/api/verify/status`, `${API_BASE_URL}/api/qr/update-status`]) {
-            try { const r = await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); if(r.ok) return {success:true}; } catch(e){}
+            try { 
+                const r = await fetch(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); 
+                if(r.ok) return {success:true}; 
+            } catch(e){}
         }
-        try { await fetch(FULL_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_input:pendingUserInput,scanned_data:qrData})}); return {success:true}; }
-        catch(e){ return {success:false,error:e.message}; }
+        
+        try { 
+            await fetch(FULL_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user_input:pendingUserInput,scanned_data:qrData})}); 
+            return {success:true}; 
+        } catch(e){ 
+            return {success:false,error:e.message}; 
+        }
     }
 
     function performLocalCrossVerification(qrData) {
@@ -403,21 +490,269 @@
         return {...vr, backend_updated:bu.success, backend_error:bu.success?null:bu.error};
     }
 
+    async function saveVerificationLog(entry) {
+        try {
+            const logData = {
+                qr_uuid: entry.qr_uuid,
+                qr_item: entry.item_name,      // Item Name from QR code
+                part_name: entry.part_name,     // Part Name from QR code - THIS IS CRITICAL
+                part_maker: entry.part_maker,   // Part Maker from QR code
+                lot_no: entry.lot_no,           // Lot Number from QR code
+                user_item: pendingUserInput.item_name,
+                user_part: pendingUserInput.part_name,
+                status: entry.status,
+                result: entry.result,
+                backend_updated: entry.backend_updated === 'Yes',
+                verified_by: entry.verified_by
+            };
+
+            console.log('Saving verification log with Part Name:', logData.part_name);
+            console.log('Saving verification log with Item Name:', logData.qr_item);
+
+            const response = await fetch(VERIFICATION_LOGS_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(logData)
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to save verification log:', await response.text());
+            } else {
+                const savedData = await response.json();
+                console.log('Verification log saved successfully with Part Name:', savedData);
+            }
+        } catch (error) {
+            console.error('Failed to save verification log:', error);
+        }
+    }
+
+    function addVerificationEntryToTable(entry) {
+        const tableBody = document.getElementById('verificationHistoryTable');
+        
+        // Format timestamp
+        const formattedTime = new Date(entry.timestamp).toLocaleString();
+        const shortUuid = entry.qr_uuid.substring(0, 8) + '...';
+        
+        // Create new row with the Part Name from entry
+        const newRow = document.createElement('tr');
+        newRow.className = 'new-row';
+        newRow.innerHTML = `
+            <td class="text-sm">${formattedTime}</td>
+            <td class="text-xs font-mono">${shortUuid}</td>
+            <td class="text-sm font-medium">${entry.part_name || 'N/A'}</td>
+            <td class="text-sm">${entry.item_name || 'N/A'}</td>
+            <td><span class="badge badge-soft ${entry.status==='GOOD'?'badge-success':'badge-error'}">${entry.status}</span></td>
+            <td><span class="badge badge-soft ${entry.result==='GOOD'?'badge-success':'badge-error'}">${entry.result}</span></td>
+            <td class="text-sm">${entry.verified_by}</td>
+        `;
+        
+        // Store the part name as a data attribute for debugging
+        newRow.setAttribute('data-part-name', entry.part_name);
+        newRow.setAttribute('data-item-name', entry.item_name);
+        
+        // Check if there's a "No verifications" message
+        if (tableBody.children.length === 1 && tableBody.children[0].textContent.includes('No verifications yet')) {
+            tableBody.innerHTML = '';
+        }
+        
+        // Insert at the beginning
+        tableBody.insertBefore(newRow, tableBody.firstChild);
+        
+        // Keep only last 10 entries
+        while (tableBody.children.length > 10) {
+            tableBody.removeChild(tableBody.lastChild);
+        }
+        
+        // Auto-scroll to show the new entry
+        newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        console.log(`Added to table - Part: ${entry.part_name}, Item: ${entry.item_name}`);
+    }
+
+    async function fetchBackendLogsForRecentTable() {
+        const tableBody = document.getElementById('verificationHistoryTable');
+        
+        try {
+            const response = await fetch(`${VERIFICATION_LOGS_URL}?limit=10`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const logs = data.logs || [];
+            
+            console.log('Fetched logs from backend:', logs);
+            
+            if (logs.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-8 text-base-content/50">
+                            <i class="fas fa-qrcode text-4xl mb-2 opacity-30 block"></i>
+                            <p>No verifications yet. Scan a QR code to get started.</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Map logs to display Part Name and Item Name correctly
+            tableBody.innerHTML = logs.map((log, index) => {
+                // CRITICAL: Get Part Name from the stored part_name field
+                let partName = 'N/A';
+                let itemName = 'N/A';
+                
+                // Priority 1: Use the stored part_name field (this is the correct Part Name from QR code)
+                if (log.part_name && log.part_name !== 'N/A' && log.part_name !== '') {
+                    partName = log.part_name;
+                    console.log(`Log ${index}: Using stored part_name: ${partName}`);
+                } 
+                // Priority 2: If part_name is missing, try to extract from qr_data
+                else if (log.qr_data && typeof log.qr_data === 'object') {
+                    if (log.qr_data.part && log.qr_data.part.name) {
+                        partName = log.qr_data.part.name;
+                        console.log(`Log ${index}: Extracted part_name from qr_data: ${partName}`);
+                    }
+                }
+                // Priority 3: Check if there's a separate part_name field in the response
+                else if (log.part_name_from_qr) {
+                    partName = log.part_name_from_qr;
+                    console.log(`Log ${index}: Using part_name_from_qr: ${partName}`);
+                }
+                
+                // Get Item Name
+                if (log.qr_item && log.qr_item !== 'N/A' && log.qr_item !== '') {
+                    itemName = log.qr_item;
+                } else if (log.item_name) {
+                    itemName = log.item_name;
+                } else if (log.user_item) {
+                    itemName = log.user_item;
+                }
+                
+                // Debug log to see what we're displaying
+                console.log(`Displaying - Part: ${partName}, Item: ${itemName}`);
+                
+                return `
+                    <tr data-part-name="${partName}" data-item-name="${itemName}">
+                        <td class="text-sm">${new Date(log.timestamp).toLocaleString()}</td>
+                        <td class="text-xs font-mono">${log.qr_uuid ? log.qr_uuid.substring(0,8) + '...' : 'N/A'}</td>
+                        <td class="text-sm font-medium">${partName}</td>
+                        <td class="text-sm">${itemName}</td>
+                        <td><span class="badge badge-soft ${log.status==='GOOD'?'badge-success':'badge-error'}">${log.status || 'N/A'}</span></td>
+                        <td><span class="badge badge-soft ${log.result==='GOOD'?'badge-success':'badge-error'}">${log.result || 'N/A'}</span></td>
+                        <td class="text-sm">${log.verified_by || 'System'}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            console.log('Table updated with', logs.length, 'logs');
+            
+        } catch (error) {
+            console.error('Failed to fetch backend logs for recent table:', error);
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center py-8 text-error">
+                        <i class="fas fa-exclamation-triangle text-4xl mb-2 opacity-30 block"></i>
+                        <p>Failed to load verification logs</p>
+                        <p class="text-xs mt-1">${error.message}</p>
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
     function displayVerificationResult(result, qrData) {
         const rd = document.getElementById("verification-result");
         rd.classList.remove("hidden");
         const ok = result.verified===true;
         const hl = (a,b) => a===b?'match-highlight':'mismatch-highlight';
-        rd.innerHTML = `<div class="alert alert-${ok?'success':'error'} shadow-lg mb-3"><div><span class="text-2xl">${ok?"✅":"❌"}</span><div><h3 class="font-bold text-lg">Verification ${ok?"PASSED":"FAILED"}</h3><p class="text-sm">${result.message}</p></div></div></div><div class="mt-3 p-3 bg-base-100 rounded-lg border"><div class="space-y-2 text-sm"><div class="${hl(pendingUserInput.item_name.toLowerCase(),qrData.item.toLowerCase())}"><div class="flex justify-between"><span>Item:</span><span>User: "${pendingUserInput.item_name}" | QR: "${qrData.item}"</span></div></div><div class="${hl(pendingUserInput.part_name.toLowerCase(),qrData.part.name.toLowerCase())}"><div class="flex justify-between"><span>Part:</span><span>User: "${pendingUserInput.part_name}" | QR: "${qrData.part.name}"</span></div></div><div class="${hl(pendingUserInput.part_maker.toLowerCase(),(qrData.part.maker||'').toLowerCase())}"><div class="flex justify-between"><span>Maker:</span><span>User: "${pendingUserInput.part_maker}" | QR: "${qrData.part.maker||'N/A'}"</span></div></div><div class="${hl(pendingUserInput.lot_no.toLowerCase(),qrData.lot_no.toLowerCase())}"><div class="flex justify-between"><span>Lot:</span><span>User: "${pendingUserInput.lot_no}" | QR: "${qrData.lot_no}"</span></div></div><div class="mt-2 text-xs"><span class="font-semibold">QR UUID:</span> <code>${qrData.qr_uuid}</code></div></div></div>`;
-        scanCount++; document.getElementById('scanCountDisplay').textContent = scanCount;
-        if(ok){verifiedCount++; document.getElementById('verifiedCountDisplay').textContent=verifiedCount;}
-        verificationHistory.unshift({timestamp:new Date().toLocaleTimeString(),qr_uuid:qrData.qr_uuid,user_item:pendingUserInput.item_name,qr_item:qrData.item,status:result.status,backend_updated:result.backend_updated?"Yes":"No",verified:ok});
-        if(verificationHistory.length>10) verificationHistory.pop();
-        document.getElementById("verificationHistoryTable").innerHTML = verificationHistory.map(v=>`<tr><td class="text-sm">${v.timestamp}</td><td class="text-xs font-mono">${v.qr_uuid.substring(0,8)}...</td><td class="text-sm">${v.user_item}</td><td class="text-sm">${v.qr_item}</td><td><span class="badge badge-soft ${v.status==='GOOD'?'badge-success':'badge-error'}">${v.status}</span></td><td><span class="text-xs ${v.backend_updated==='Yes'?'text-success':'text-warning'}">${v.backend_updated}</span></td><td><span class="text-sm ${v.verified?'text-success':'text-error'}">${v.verified?'✅ PASSED':'❌ FAILED'}</span></td></tr>`).join('');
+        
+        rd.innerHTML = `<div class="alert alert-${ok?'success':'error'} shadow-lg mb-3">
+            <div><span class="text-2xl">${ok?"✅":"❌"}</span>
+            <div><h3 class="font-bold text-lg">Verification ${ok?"PASSED":"FAILED"}</h3>
+            <p class="text-sm">${result.message}</p></div></div>
+            </div>
+            <div class="mt-3 p-3 bg-base-100 rounded-lg border">
+                <div class="space-y-2 text-sm">
+                    <div class="${hl(pendingUserInput.item_name.toLowerCase(),qrData.item.toLowerCase())}">
+                        <div class="flex justify-between"><span>Item:</span><span>User: "${pendingUserInput.item_name}" | QR: "${qrData.item}"</span></div>
+                    </div>
+                    <div class="${hl(pendingUserInput.part_name.toLowerCase(),qrData.part.name.toLowerCase())}">
+                        <div class="flex justify-between"><span>Part:</span><span>User: "${pendingUserInput.part_name}" | QR: "${qrData.part.name}"</span></div>
+                    </div>
+                    <div class="${hl(pendingUserInput.part_maker.toLowerCase(),(qrData.part.maker||'').toLowerCase())}">
+                        <div class="flex justify-between"><span>Maker:</span><span>User: "${pendingUserInput.part_maker}" | QR: "${qrData.part.maker||'N/A'}"</span></div>
+                    </div>
+                    <div class="${hl(pendingUserInput.lot_no.toLowerCase(),qrData.lot_no.toLowerCase())}">
+                        <div class="flex justify-between"><span>Lot:</span><span>User: "${pendingUserInput.lot_no}" | QR: "${qrData.lot_no}"</span></div>
+                    </div>
+                    <div class="mt-2 text-xs"><span class="font-semibold">QR UUID:</span> <code>${qrData.qr_uuid}</code></div>
+                </div>
+            </div>`;
+        
+        scanCount++; 
+        document.getElementById('scanCountDisplay').textContent = scanCount;
+        if(ok){
+            verifiedCount++; 
+            document.getElementById('verifiedCountDisplay').textContent=verifiedCount;
+        } else {
+            nogoodCount++; 
+            document.getElementById('nogoodCountDisplay').textContent=nogoodCount;
+        }
+
+        // Create verification history entry with CORRECT Part Name and Item Name
+        const verificationEntry = {
+            timestamp: new Date().toISOString(),
+            qr_uuid: qrData.qr_uuid,
+            // QR code fields - THESE ARE WHAT WE DISPLAY IN THE TABLE
+            part_name: qrData.part.name,        // Part Name from QR code
+            part_maker: qrData.part.maker || '', // Part Maker from QR code
+            item_name: qrData.item,              // Item Name from QR code
+            lot_no: qrData.lot_no,               // Lot Number from QR code
+            // Status fields
+            status: result.status,
+            result: ok ? 'GOOD' : 'NO_GOOD',
+            backend_updated: result.backend_updated ? "Yes" : "No",
+            verified_by: currentUser.employee_id || 'admin'
+        };
+
+        console.log('Verification entry created with Part Name:', verificationEntry.part_name);
+        console.log('Verification entry created with Item Name:', verificationEntry.item_name);
+
+        // Save to backend verification logs
+        saveVerificationLog(verificationEntry);
+        
+        // Update table ASYNCHRONOUSLY
+        addVerificationEntryToTable(verificationEntry);
+        
+        // Show toast notification
+        showToast(`QR Verified: ${qrData.part.name} - ${ok ? 'GOOD' : 'NO GOOD'}`, ok ? 'success' : 'error');
     }
 
     function parseQRData(t) {
-        try { const p=JSON.parse(t); const qr_uuid=p.qr_uuid||p.uuid; const item=p.item||p.item_name; let pn='',pm=''; if(p.part){pn=p.part.name;pm=p.part.maker||'';}else{pn=p.part_name||'';pm=p.part_maker||'';} const lot_no=p.lot_no; if(qr_uuid&&item&&pn&&lot_no) return {qr_uuid,item,part:{name:pn,maker:pm},lot_no}; return null; } catch(e){return null;}
+        try { 
+            const p=JSON.parse(t); 
+            const qr_uuid=p.qr_uuid||p.uuid; 
+            const item=p.item||p.item_name; 
+            let pn='',pm=''; 
+            if(p.part){
+                pn=p.part.name;
+                pm=p.part.maker||'';
+            } else {
+                pn=p.part_name||'';
+                pm=p.part_maker||'';
+            } 
+            const lot_no=p.lot_no; 
+            if(qr_uuid&&item&&pn&&lot_no) return {qr_uuid,item,part:{name:pn,maker:pm},lot_no}; 
+            return null; 
+        } catch(e){return null;}
     }
 
     async function onQRCodeScanned(decodedText) {
@@ -425,7 +760,13 @@
         if(html5QrCode&&isScanning) try{await html5QrCode.stop();isScanning=false;}catch(e){}
         document.getElementById("scan-status").classList.remove("hidden");
         const parsed = parseQRData(decodedText);
-        if(!parsed){document.getElementById("scan-status").classList.add("hidden");document.getElementById("verification-result").classList.remove("hidden");document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3></div></div></div>`;isProcessing=false;return;}
+        if(!parsed){
+            document.getElementById("scan-status").classList.add("hidden");
+            document.getElementById("verification-result").classList.remove("hidden");
+            document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3></div></div></div>`;
+            isProcessing=false;
+            return;
+        }
         const vr = await verifyAndUpdateBackend(parsed);
         document.getElementById("scan-status").classList.add("hidden");
         displayVerificationResult(vr, parsed);
@@ -440,9 +781,15 @@
         isProcessing=false;
         const el=document.getElementById("qr-reader"); while(el.firstChild)el.removeChild(el.firstChild);
         html5QrCode=new Html5Qrcode("qr-reader");
-        try{await html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},onQRCodeScanned,()=>{});isScanning=true;}
-        catch(err){document.getElementById("verification-result").classList.remove("hidden");document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p></div></div></div>`;}
+        try{
+            await html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},onQRCodeScanned,()=>{});
+            isScanning=true;
+        } catch(err){
+            document.getElementById("verification-result").classList.remove("hidden");
+            document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p></div></div></div>`;
+        }
     }
+    
     async function stopQrScanner(){if(html5QrCode&&isScanning)try{await html5QrCode.stop();isScanning=false;}catch(e){}}
     async function restartScanner(){await stopQrScanner();setTimeout(()=>startQrScanner(),100);}
 
@@ -469,6 +816,8 @@
                 document.getElementById("copyQrDataBtn").onclick=()=>{navigator.clipboard.writeText(qrPayload);const b=document.getElementById("copyQrDataBtn");b.innerHTML='<i class="fas fa-check mr-1"></i> Copied!';setTimeout(()=>{b.innerHTML='<i class="fas fa-copy mr-1"></i> Copy QR Data';},2000);};
             },50);
             ["genItemName","genPartName","genPartMaker","genLotNo"].forEach(id=>document.getElementById(id).value="");
+            // Refresh total count after generation
+            fetchTotalQrCount();
         } catch(err){ errEl.innerText=err.message; resEl.classList.add("hidden"); }
         btn.disabled=false; btn.innerHTML='<i class="fas fa-qrcode mr-2"></i> Generate QR Code';
     });
@@ -495,6 +844,7 @@
             const data = await resp.json();
             const records = Array.isArray(data)?data:(data.qr_records||data.records||data.data||[]);
             allQrRecords = records.map(normaliseRecord);
+            
             document.getElementById('qrListLoading').classList.add('hidden');
             renderQrList();
             updateQrListBadge(allQrRecords.length);
@@ -582,6 +932,22 @@
         document.getElementById('qrDetailModal').showModal();
     }
 
+    async function fetchTotalQrCount() {
+        try {
+            const response = await fetch(LIST_QR_URL, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                const records = Array.isArray(data) ? data : (data.qr_records || data.records || data.data || []);
+                document.getElementById('totalQrCount').textContent = records.length;
+            }
+        } catch (error) {
+            console.error('Failed to fetch QR count:', error);
+        }
+    }
+
     document.getElementById('detailDownloadBtn')?.addEventListener('click',()=>{
         if(!activeDetailRecord) return;
         setTimeout(()=>{
@@ -622,31 +988,14 @@
     document.getElementById('refreshQrListBtn')?.addEventListener('click', fetchQrList);
     document.getElementById('retryQrListBtn')?.addEventListener('click', fetchQrList);
 
-    document.getElementById('printAllQrBtn')?.addEventListener('click',()=>{
-        const filtered=getFilteredRecords();
-        if(filtered.length===0){alert('No QR codes to print.');return;}
-        const pa=document.getElementById('printArea'); pa.style.display='block';
-        const cards=filtered.map(r=>{
-            const el=document.getElementById(`mini-${r.qr_uuid.replace(/-/g,'')}`);
-            const cv=el?el.querySelector('canvas'):null;
-            const src=cv?cv.toDataURL('image/png'):'';
-            return `<div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;break-inside:avoid;">
-                ${src?`<img src="${src}" style="width:120px;height:120px;margin:0 auto 8px;display:block;border:1px solid #e2e8f0;border-radius:6px;padding:4px;">`:
-                      `<div style="width:120px;height:120px;background:#f1f5f9;border-radius:6px;margin:0 auto 8px;"></div>`}
-                <p style="font-weight:700;font-size:13px;margin:0 0 2px;">${r.item}</p>
-                <p style="color:#64748b;font-size:11px;margin:0 0 4px;">${r.part_name} · ${r.part_maker}</p>
-                <p style="font-size:11px;color:#475569;">Lot: ${r.lot_no}</p>
-                <p style="font-family:monospace;font-size:9px;color:#94a3b8;margin-top:4px;">${r.qr_uuid.substring(0,16)}…</p>
-            </div>`;
-        }).join('');
-        pa.innerHTML=`<div style="font-family:sans-serif;padding:16px;"><h1 style="font-size:20px;font-weight:700;margin-bottom:16px;text-align:center;">QR Code List (${filtered.length} records)</h1><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">${cards}</div></div>`;
-        setTimeout(()=>{window.print();pa.style.display='none';pa.innerHTML='';},300);
-    });
+    // Event listener for recent verification table refresh
+    document.getElementById('refreshLogsBtn')?.addEventListener('click', fetchBackendLogsForRecentTable);
 
-    ['qrListSearch','qrListStatusFilter','qrListSortBy'].forEach(id=>{
-        document.getElementById(id)?.addEventListener('input',  renderQrList);
-        document.getElementById(id)?.addEventListener('change', renderQrList);
-    });
+    // Initialize on page load
+    setTimeout(() => {
+        fetchBackendLogsForRecentTable();
+        fetchTotalQrCount();
+    }, 1200);
 
     // ==================== NAVIGATION ====================
     const VIEWS = ['dashboardView','generateQrView','qrListView'];
@@ -682,7 +1031,6 @@
     document.getElementById("dashboardLink") ?.addEventListener("click", e=>{e.preventDefault();setActiveView('dashboardView','dashboardLink');closeSidebar();});
     document.getElementById("generateQrLink")?.addEventListener("click", e=>{e.preventDefault();setActiveView('generateQrView','generateQrLink');closeSidebar();});
     document.getElementById("qrVerifyLink")  ?.addEventListener("click", e=>{e.preventDefault();openUserInputModal();closeSidebar();});
-    document.getElementById("logsLink")      ?.addEventListener("click", e=>{e.preventDefault();alert("Verification logs can be viewed in Dashboard table");});
     document.getElementById("qrListLink")    ?.addEventListener("click", e=>{e.preventDefault();setActiveView('qrListView','qrListLink');fetchQrList();closeSidebar();});
     document.getElementById("inventoryLink") ?.addEventListener("click", e=>{e.preventDefault();alert("Inventory module coming soon");});
     document.getElementById("confirmUserInputBtn")?.addEventListener("click", onConfirmUserInput);
@@ -706,7 +1054,7 @@
         else{s.classList.add('-translate-x-full');o.classList.add('hidden');}
     });
 
-    console.log('QR System Ready — Generation, Verification & List Enabled');
+    console.log('QR System Ready — Real-time Verification Updates Enabled');
     </script>
 </body>
 </html>

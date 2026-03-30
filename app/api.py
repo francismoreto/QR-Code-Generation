@@ -3,8 +3,8 @@ from  django.http import JsonResponse
 from django.core.serializers import serialize
 import json
 from ninja import NinjaAPI
-from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode
-from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema
+from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode, VerificationLog
+from .schema import WorkerSchema,ProductSchema,WorkerOutputSchema,QRScanResponseSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema, VerificationLogSchema, VerificationLogListResponseSchema
 import csv
 import os
 import io
@@ -1588,19 +1588,128 @@ def get_items_for_customer(request, customer_name: str):
             })
         
         return {
-            "customer_name": customer_name,
-            "items": result
         }
         
     except Customer.DoesNotExist:
         return JsonResponse({"error": "Customer not found"}, status=404)
 
 
+# ==================== VERIFICATION LOGS ENDPOINT ====================
 
+@api.get("/verification/logs", response=VerificationLogListResponseSchema, tags=["QR VERIFY"])
+def get_verification_logs(request, limit: int = 10):
+    """
+    Get recent QR verification logs
+    Returns the most recent verification logs with 'good' and 'no good' instances
+    """
+    try:
+        # Get the most recent verification logs, ordered by timestamp descending
+        logs = VerificationLog.objects.all().order_by('-timestamp')[:limit]
+        
+        # Convert to list of dictionaries
+        log_data = []
+        for log in logs:
+            log_data.append({
+                "id": log.id,
+                "qr_uuid": str(log.qr_uuid),
+                "qr_item": log.qr_item,
+                "qr_part": log.qr_part,
+                "user_item": log.user_item,
+                "user_part": log.user_part,
+                "status": log.status,
+                "result": log.result,
+                "backend_updated": log.backend_updated,
+                "timestamp": log.timestamp,
+                "verified_by": log.verified_by
+            })
+        
+        return {
+            "count": len(log_data),
+            "logs": log_data
+        }
+        
+    except Exception as e:
+        return JsonResponse({"error": f"Failed to retrieve verification logs: {str(e)}"}, status=500)
 
-  #existing_lot = WorkerOutput.objects.filter(lot_no = data.lot_no).first() #filter to check if lot exist
-   # item_code_filter = WorkerOutput.objects.filter(lot_no =data.lot_no).first().output_data[0][0]['item_no'] #filter item_code of for posting item
-    #current_product_processes = Product.objects.filter(item_code=item_code_filter).first().process #filter current product processes
+@api.post("/verification/logs", tags=["QR VERIFY"])
+def create_verification_log(request):
+    """
+    Create a new verification log entry
+    This endpoint is called when a QR verification is completed
+    """
+    try:
+        import json
+        # Extract data from the request body
+        data = json.loads(request.body)
+        qr_uuid = data.get('qr_uuid')
+        
+        # CRITICAL FIX: Get part_name from the correct field
+        # The frontend sends 'part_name' (from QR code data)
+        qr_part = data.get('part_name')  # This is the part name from QR code
+        if not qr_part:
+            qr_part = data.get('qr_part')  # Fallback
+        
+        qr_item = data.get('qr_item')  # This is the item name from QR code
+        if not qr_item:
+            qr_item = data.get('qr_item', data.get('item_name', ''))
+        
+        user_item = data.get('user_item')
+        user_part = data.get('user_part')
+        status = data.get('status')
+        result = data.get('result')
+        backend_updated = data.get('backend_updated', False)
+        verified_by = data.get('verified_by', 'admin')
+        
+        # Debug logging
+        print(f"Creating verification log:")
+        print(f"  qr_uuid: {qr_uuid}")
+        print(f"  qr_item (from QR): {qr_item}")
+        print(f"  qr_part (from QR): {qr_part}")
+        print(f"  user_item: {user_item}")
+        print(f"  user_part: {user_part}")
+        print(f"  status: {status}")
+        print(f"  result: {result}")
+        
+        # Validate required fields
+        if not all([qr_uuid, qr_item, user_item, status, result]):
+            return JsonResponse({
+                "error": "Missing required fields",
+                "received": {
+                    "qr_uuid": qr_uuid,
+                    "qr_item": qr_item,
+                    "user_item": user_item,
+                    "status": status,
+                    "result": result
+                }
+            }, status=400)
+        
+        # Create new verification log
+        verification_log = VerificationLog.objects.create(
+            qr_uuid=qr_uuid,
+            qr_item=qr_item,      # This stores the item name from QR code
+            qr_part=qr_part,      # This stores the part name from QR code - CRITICAL
+            user_item=user_item,
+            user_part=user_part,
+            status=status,
+            result=result,
+            backend_updated=backend_updated,
+            verified_by=verified_by
+        )
+        
+        print(f"Verification log created with ID: {verification_log.id}")
+        print(f"  Stored qr_part: {verification_log.qr_part}")
+        
+        return {
+            "message": "Verification log created successfully",
+            "log_id": verification_log.id,
+            "stored_part_name": verification_log.qr_part
+        }
+        
+    except Exception as e:
+        print(f"Error creating verification log: {str(e)}")
+        return JsonResponse({"error": f"Failed to create verification log: {str(e)}"}, status=500)
+        
+# ... (rest of the code remains the same)
    # current_output_processes = WorkerOutput.objects.filter(lot_no=data.lot_no).first().output_data #filter current output list of process
 
     #if existing_lot: #boolean check if lot exist

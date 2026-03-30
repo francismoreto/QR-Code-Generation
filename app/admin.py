@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.db.models import Count
-from .models import Worker, Product, WorkerOutput, Item, Customer, Partname,QRCode
+from .models import Worker, Product, WorkerOutput, Item, Customer, Partname, QRCode, VerificationLog
 # Register your models here.
 
 
@@ -334,6 +334,262 @@ class QRCodeAdmin(admin.ModelAdmin):
             obj.created_by = request.user.username
         super().save_model(request, obj, form, change)
 
+class VerificationLogAdmin(admin.ModelAdmin):
+    list_display = [
+        'id',
+        'qr_uuid_short',
+        'part_name_display',  # Changed to avoid conflict with model field
+        'item_name_display',   # Changed to avoid conflict with model field
+        'status_colored',
+        'result_colored',
+        'backend_updated_badge',
+        'timestamp_short',
+        'verified_by'
+    ]
+    
+    list_filter = [
+        'status',
+        'result',
+        'backend_updated',
+        'timestamp',
+        'verified_by'
+    ]
+    
+    search_fields = [
+        'qr_uuid',
+        'qr_item',  # Keep original field names for search
+        'user_item',
+        'verified_by'
+    ]
+    
+    readonly_fields = [
+        'id',
+        'qr_uuid',
+        'timestamp',
+        'qr_data_display',
+        'part_name_display',
+        'item_name_display'
+    ]
+    
+    fieldsets = [
+        ('Verification Information', {
+            'fields': [
+                'qr_uuid',
+                'part_name_display',  # Display extracted part name
+                'item_name_display',   # Display extracted item name
+                'status',
+                'result'
+            ]
+        }),
+        ('System Information', {
+            'fields': [
+                'backend_updated',
+                'verified_by',
+                'timestamp'
+            ]
+        }),
+        ('QR Data Preview', {
+            'fields': [
+                'qr_data_display'
+            ],
+            'classes': ['collapse']
+        })
+    ]
+    
+    list_per_page = 25
+    date_hierarchy = 'timestamp'
+    ordering = ['-timestamp']
+    
+    actions = ['mark_backend_updated', 'mark_backend_not_updated']
+    
+    def qr_uuid_short(self, obj):
+        return str(obj.qr_uuid)[:8] + '...'
+    qr_uuid_short.short_description = 'QR ID'
+    qr_uuid_short.admin_order_field = 'qr_uuid'
+    
+    def part_name_display(self, obj):
+        """
+        Extract Part Name from the QR code data or from the stored field
+        """
+        # First, try to get from the QR code model
+        try:
+            qr_code = QRCode.objects.filter(qr_uuid=obj.qr_uuid).first()
+            if qr_code:
+                # If QR code exists, get the part_name from it
+                if hasattr(qr_code, 'part_name') and qr_code.part_name:
+                    return qr_code.part_name
+                # If QR code has qr_item field (which is the part name)
+                elif hasattr(qr_code, 'qr_item') and qr_code.qr_item:
+                    return qr_code.qr_item
+        except:
+            pass
+        
+        # If QR code not found, try to get from the verification log's stored field
+        if hasattr(obj, 'qr_item') and obj.qr_item:
+            return obj.qr_item
+            
+        # If still nothing, try to parse from the QR data if it's stored
+        if hasattr(obj, 'qr_data') and obj.qr_data:
+            try:
+                import json
+                qr_data = json.loads(obj.qr_data) if isinstance(obj.qr_data, str) else obj.qr_data
+                # Look for part name in common field names
+                for field in ['part_name', 'partName', 'part', 'qr_item', 'item']:
+                    if field in qr_data:
+                        return qr_data[field]
+            except:
+                pass
+        
+        return '-'
+    part_name_display.short_description = 'Part Name'
+    part_name_display.admin_order_field = 'qr_item'  # Order by the original field
+    
+    def item_name_display(self, obj):
+        """
+        Extract Item Name from the QR code data or from the stored field
+        """
+        # First, try to get from the QR code model
+        try:
+            qr_code = QRCode.objects.filter(qr_uuid=obj.qr_uuid).first()
+            if qr_code:
+                # If QR code exists, get the item_name from it
+                if hasattr(qr_code, 'item_name') and qr_code.item_name:
+                    return qr_code.item_name
+                # If QR code has user_item field (which is the item name)
+                elif hasattr(qr_code, 'user_item') and qr_code.user_item:
+                    return qr_code.user_item
+        except:
+            pass
+        
+        # If QR code not found, try to get from the verification log's stored field
+        if hasattr(obj, 'user_item') and obj.user_item:
+            return obj.user_item
+            
+        # If still nothing, try to parse from the QR data if it's stored
+        if hasattr(obj, 'qr_data') and obj.qr_data:
+            try:
+                import json
+                qr_data = json.loads(obj.qr_data) if isinstance(obj.qr_data, str) else obj.qr_data
+                # Look for item name in common field names
+                for field in ['item_name', 'itemName', 'item', 'user_item', 'product']:
+                    if field in qr_data:
+                        return qr_data[field]
+            except:
+                pass
+        
+        return '-'
+    item_name_display.short_description = 'Item Name'
+    item_name_display.admin_order_field = 'user_item'  # Order by the original field
+    
+    def status_colored(self, obj):
+        if obj.status == VerificationLog.Result.GOOD:
+            return format_html(
+                '<span style="background-color: #28a745; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">✓ {}</span>',
+                obj.get_status_display()
+            )
+        elif obj.status == VerificationLog.Result.NO_GOOD:
+            return format_html(
+                '<span style="background-color: #dc3545; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">✗ {}</span>',
+                obj.get_status_display()
+            )
+        return format_html(
+            '<span style="background-color: #6c757d; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            obj.get_status_display()
+        )
+    status_colored.short_description = 'Status'
+    status_colored.admin_order_field = 'status'
+    
+    def result_colored(self, obj):
+        if obj.result == VerificationLog.Result.GOOD:
+            return format_html(
+                '<span style="background-color: #28a745; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">✓ {}</span>',
+                obj.get_result_display()
+            )
+        elif obj.result == VerificationLog.Result.NO_GOOD:
+            return format_html(
+                '<span style="background-color: #dc3545; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">✗ {}</span>',
+                obj.get_result_display()
+            )
+        return format_html(
+            '<span style="background-color: #6c757d; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            obj.get_result_display()
+        )
+    result_colored.short_description = 'Result'
+    result_colored.admin_order_field = 'result'
+    
+    def backend_updated_badge(self, obj):
+        if obj.backend_updated:
+            return format_html(
+                '<span style="background-color: #28a745; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">✓ Yes</span>'
+            )
+        return format_html(
+            '<span style="background-color: #ffc107; color: black; padding: 3px 10px; border-radius: 3px; font-weight: bold;">⚠ No</span>'
+        )
+    backend_updated_badge.short_description = 'Backend Updated'
+    backend_updated_badge.admin_order_field = 'backend_updated'
+    
+    def timestamp_short(self, obj):
+        return obj.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+    timestamp_short.short_description = 'Timestamp'
+    timestamp_short.admin_order_field = 'timestamp'
+    
+    def qr_data_display(self, obj):
+        # Try to find related QR code for additional context
+        try:
+            qr_code = QRCode.objects.filter(qr_uuid=obj.qr_uuid).first()
+            if qr_code:
+                import json
+                data = qr_code.generate_qr_data()
+                formatted_json = json.dumps(data, indent=2)
+                
+                # Also display the parsed part and item names
+                part_name = self.part_name_display(obj)
+                item_name = self.item_name_display(obj)
+                
+                return format_html(
+                    '<div style="background-color: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 8px; font-family: monospace;">'
+                    '<div style="margin-bottom: 10px; padding: 10px; background-color: #2d2d2d; border-radius: 5px;">'
+                    '<strong style="color: #4caf50;">📦 Part Name:</strong> <span style="color: #ffa500;">{}</span><br>'
+                    '<strong style="color: #4caf50;">🏷️ Item Name:</strong> <span style="color: #ffa500;">{}</span>'
+                    '</div>'
+                    '<pre style="margin: 0; color: inherit;">{}</pre>'
+                    '</div>',
+                    part_name,
+                    item_name,
+                    formatted_json
+                )
+        except Exception as e:
+            pass
+        
+        # If QR code not found, show the stored qr_item and user_item
+        qr_item = getattr(obj, 'qr_item', '-')
+        user_item = getattr(obj, 'user_item', '-')
+        
+        return format_html(
+            '<div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">'
+            '<div style="margin-bottom: 10px;">'
+            '<strong>📦 Part Name (from log):</strong> {}<br>'
+            '<strong>🏷️ Item Name (from log):</strong> {}'
+            '</div>'
+            '<div style="color: #999; text-align: center;">'
+            '<span>⚠️ Related QR code not found</span>'
+            '</div>'
+            '</div>',
+            qr_item,
+            user_item
+        )
+    qr_data_display.short_description = 'QR Data & Extracted Information'
+    
+    def mark_backend_updated(self, request, queryset):
+        updated = queryset.update(backend_updated=True)
+        self.message_user(request, f'✅ {updated} verification log(s) marked as backend updated.')
+    mark_backend_updated.short_description = "Mark selected as backend updated"
+    
+    def mark_backend_not_updated(self, request, queryset):
+        updated = queryset.update(backend_updated=False)
+        self.message_user(request, f'⚠ {updated} verification log(s) marked as backend not updated.')
+    mark_backend_not_updated.short_description = "Mark selected as backend not updated"
+
 admin.site.register(Worker, WorkerAdmin)
 admin.site.register(Product, ProductAdmin)
 admin.site.register(WorkerOutput, WorkerOutputAdmin)
@@ -341,3 +597,4 @@ admin.site.register(Customer, CustomerAdmin)
 admin.site.register(Item, ItemAdmin)
 admin.site.register(Partname, PartnameAdmin)
 admin.site.register(QRCode, QRCodeAdmin)
+admin.site.register(VerificationLog, VerificationLogAdmin)

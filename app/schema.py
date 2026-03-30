@@ -256,3 +256,22 @@ class CrossVerificationResponseSchema(Schema):
     details: Optional[dict[str, Any]] = None
     mismatches: Optional[List[str]] = None
     qr_data: Optional[dict[str, Any]] = None
+
+# ==================== VERIFICATION LOG SCHEMAS ====================
+
+class VerificationLogSchema(Schema):
+    """Schema for individual verification log entry"""
+    id: int
+    qr_uuid: str
+    qr_item: str
+    user_item: str
+    status: str
+    result: str
+    backend_updated: bool
+    timestamp: datetime
+    verified_by: Optional[str] = None
+
+class VerificationLogListResponseSchema(Schema):
+    """Response schema for verification logs list"""
+    count: int
+    logs: List[VerificationLogSchema]
