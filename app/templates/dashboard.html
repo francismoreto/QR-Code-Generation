@@ -201,7 +201,7 @@
                         <div class="overflow-x-auto">
                             <table class="table table-zebra w-full">
                                 <thead>
-                                    <tr>
+                                     <tr>
                                         <th>Timestamp</th>
                                         <th>QR ID</th>
                                         <th>Part Name</th>
@@ -209,7 +209,8 @@
                                         <th>Status</th>
                                         <th>Result</th>
                                         <th>Verified By</th>
-                                    </thead>
+                                    </tr>
+                                </thead>
                                 <tbody id="verificationHistoryTable">
                                     <tr>
                                         <td colspan="7" class="text-center py-8 text-base-content/50">
@@ -492,12 +493,11 @@
 
     async function saveVerificationLog(entry) {
         try {
+            // CRITICAL FIX: Match the backend's expected field names
             const logData = {
                 qr_uuid: entry.qr_uuid,
-                qr_item: entry.item_name,      // Item Name from QR code
-                part_name: entry.part_name,     // Part Name from QR code - THIS IS CRITICAL
-                part_maker: entry.part_maker,   // Part Maker from QR code
-                lot_no: entry.lot_no,           // Lot Number from QR code
+                qr_item: entry.item_name,      // Item Name from QR code (matches backend expectation)
+                qr_part: entry.part_name,       // Part Name from QR code (matches backend expectation)
                 user_item: pendingUserInput.item_name,
                 user_part: pendingUserInput.part_name,
                 status: entry.status,
@@ -506,8 +506,7 @@
                 verified_by: entry.verified_by
             };
 
-            console.log('Saving verification log with Part Name:', logData.part_name);
-            console.log('Saving verification log with Item Name:', logData.qr_item);
+            console.log('Saving verification log with data:', logData);
 
             const response = await fetch(VERIFICATION_LOGS_URL, {
                 method: 'POST',
@@ -518,13 +517,17 @@
             });
             
             if (!response.ok) {
-                console.error('Failed to save verification log:', await response.text());
+                const errorText = await response.text();
+                console.error('Failed to save verification log:', errorText);
+                return false;
             } else {
                 const savedData = await response.json();
-                console.log('Verification log saved successfully with Part Name:', savedData);
+                console.log('Verification log saved successfully:', savedData);
+                return true;
             }
         } catch (error) {
             console.error('Failed to save verification log:', error);
+            return false;
         }
     }
 
@@ -547,10 +550,6 @@
             <td><span class="badge badge-soft ${entry.result==='GOOD'?'badge-success':'badge-error'}">${entry.result}</span></td>
             <td class="text-sm">${entry.verified_by}</td>
         `;
-        
-        // Store the part name as a data attribute for debugging
-        newRow.setAttribute('data-part-name', entry.part_name);
-        newRow.setAttribute('data-item-name', entry.item_name);
         
         // Check if there's a "No verifications" message
         if (tableBody.children.length === 1 && tableBody.children[0].textContent.includes('No verifications yet')) {
@@ -604,34 +603,24 @@
             }
             
             // Map logs to display Part Name and Item Name correctly
-            tableBody.innerHTML = logs.map((log, index) => {
-                // CRITICAL: Get Part Name from the stored part_name field
+            tableBody.innerHTML = logs.map((log) => {
+                // Get Part Name from the stored qr_part field
                 let partName = 'N/A';
                 let itemName = 'N/A';
                 
-                // Priority 1: Use the stored part_name field (this is the correct Part Name from QR code)
-                if (log.part_name && log.part_name !== 'N/A' && log.part_name !== '') {
-                    partName = log.part_name;
-                    console.log(`Log ${index}: Using stored part_name: ${partName}`);
-                } 
-                // Priority 2: If part_name is missing, try to extract from qr_data
-                else if (log.qr_data && typeof log.qr_data === 'object') {
-                    if (log.qr_data.part && log.qr_data.part.name) {
-                        partName = log.qr_data.part.name;
-                        console.log(`Log ${index}: Extracted part_name from qr_data: ${partName}`);
-                    }
+                // Use qr_part from backend (this is the correct Part Name from QR code)
+                if (log.qr_part && log.qr_part !== 'N/A' && log.qr_part !== '') {
+                    partName = log.qr_part;
+                    console.log(`Log: Using qr_part: ${partName}`);
                 }
-                // Priority 3: Check if there's a separate part_name field in the response
-                else if (log.part_name_from_qr) {
-                    partName = log.part_name_from_qr;
-                    console.log(`Log ${index}: Using part_name_from_qr: ${partName}`);
+                // Fallback to qr_item if needed (though that's item name, not part)
+                else if (log.qr_item && log.qr_item !== 'N/A') {
+                    partName = log.qr_item;
                 }
                 
-                // Get Item Name
+                // Get Item Name from qr_item field
                 if (log.qr_item && log.qr_item !== 'N/A' && log.qr_item !== '') {
                     itemName = log.qr_item;
-                } else if (log.item_name) {
-                    itemName = log.item_name;
                 } else if (log.user_item) {
                     itemName = log.user_item;
                 }
@@ -640,7 +629,7 @@
                 console.log(`Displaying - Part: ${partName}, Item: ${itemName}`);
                 
                 return `
-                    <tr data-part-name="${partName}" data-item-name="${itemName}">
+                    <tr>
                         <td class="text-sm">${new Date(log.timestamp).toLocaleString()}</td>
                         <td class="text-xs font-mono">${log.qr_uuid ? log.qr_uuid.substring(0,8) + '...' : 'N/A'}</td>
                         <td class="text-sm font-medium">${partName}</td>
@@ -727,10 +716,12 @@
         console.log('Verification entry created with Item Name:', verificationEntry.item_name);
 
         // Save to backend verification logs
-        saveVerificationLog(verificationEntry);
-        
-        // Update table ASYNCHRONOUSLY
-        addVerificationEntryToTable(verificationEntry);
+        saveVerificationLog(verificationEntry).then(success => {
+            if (success) {
+                // After successful save, refresh the table to ensure consistency
+                fetchBackendLogsForRecentTable();
+            }
+        });
         
         // Show toast notification
         showToast(`QR Verified: ${qrData.part.name} - ${ok ? 'GOOD' : 'NO GOOD'}`, ok ? 'success' : 'error');

@@ -264,7 +264,9 @@ class VerificationLogSchema(Schema):
     id: int
     qr_uuid: str
     qr_item: str
+    qr_part: str
     user_item: str
+    user_part: str
     status: str
     result: str
     backend_updated: bool
