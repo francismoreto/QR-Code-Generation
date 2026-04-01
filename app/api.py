@@ -3,8 +3,8 @@ from  django.http import JsonResponse
 from django.core.serializers import serialize
 import json
 from ninja import NinjaAPI
-from .models import Worker,Product,WorkerOutput,Item,Customer,Partname, QRCode
-from .schema import WorkerSchema,ProductSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema, QRCreateSchema, CustomerUpdateSchema, DataVerificationSchema, CustomerSelectionSchema, QRScanVerificationSchema, CrossVerificationSchema, CrossVerificationResponseSchema
+from .models import Worker,Product,WorkerOutput,Item,Customer,Partname,QRCode,VerificationLog
+from .schema import WorkerSchema,ProductSchema,PartnameSchema,CustomerSchema,CustomerUpdateSchema,AppendItemSchema,QRCreateSchema,DataVerificationSchema,CustomerSelectionSchema,QRScanVerificationSchema,CrossVerificationSchema,CrossVerificationResponseSchema
 import csv
 import os
 import io
@@ -18,6 +18,7 @@ from django.core.files.base import ContentFile
 import qrcode
 from django.utils import timezone
 from datetime import datetime
+import uuid
 
 
 
@@ -869,8 +870,10 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
     CROSS VERIFICATION: Compare user input with scanned QR code data.
     This is the single verification endpoint that validates:
     1. QR code exists in database
-    2. Scanned QR data matches database
-    3. User input matches scanned QR data
+    2. Scanned QR data matches database (including lot on the QR vs DB)
+    3. User input matches scanned QR data for item, part name, and part maker.
+       Lot number is NOT compared: user lot may differ from the QR-encoded lot and
+       verification can still be GOOD when item / part / maker match.
     
     Request body:
     {
@@ -890,8 +893,8 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
     }
     
     Returns:
-        - GOOD: All data matches
-        - NO GOOD: Any mismatch found
+        - GOOD: Item, part name, and maker match user input and scanned QR (lot may differ)
+        - NO GOOD: Mismatch on item, part, or maker; or QR/DB integrity failure
     """
     try:
         # Extract data from request
@@ -949,18 +952,23 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
                 mismatches=mismatches
             )
         
-        # STEP 3: Compare user input with scanned QR data
+        # STEP 3: Compare user input with scanned QR data (lot excluded — often variable at scan time)
+        user_lot = (user_input.lot_no or "").strip()
+        scan_lot = (scanned_data.lot_no or "").strip()
         user_matches_qr = {
             "item": (user_input.item_name == scanned_data.item),
             "part_name": (user_input.part_name == scanned_data.part.name),
             "part_maker": (user_input.part_maker == scanned_data.part.maker),
-            "lot_no": (user_input.lot_no == scanned_data.lot_no)
+            "lot_no": (user_lot == scan_lot),
         }
+        core_fields_match = (
+            user_matches_qr["item"]
+            and user_matches_qr["part_name"]
+            and user_matches_qr["part_maker"]
+        )
         
-        all_match = all(user_matches_qr.values())
-        
-        # STEP 4: Update QR record based on verification result
-        if all_match:
+        # STEP 4: Update QR record based on verification result (GOOD when item/part/maker match)
+        if core_fields_match:
             # Set status to GOOD regardless of previous state
             qr_record.status = QRCode.Status.GOOD
             qr_record.verified_at = timezone.now()
@@ -969,9 +977,10 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
             return CrossVerificationResponseSchema(
                 verified=True,
                 status="GOOD",
-                message="✅ VERIFICATION SUCCESSFUL: User input matches the scanned QR code.",
+                message="✅ VERIFICATION SUCCESSFUL: Item, part, and maker match the scanned QR code.",
                 details={
                     "user_input_matches_qr": True,
+                    "lot_match": user_matches_qr["lot_no"],
                     "qr_data_integrity": "VERIFIED",
                     "qr_uuid": str(qr_record.qr_uuid),
                     "verified_at": qr_record.verified_at.isoformat()
@@ -987,7 +996,7 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
                 }
             )
         else:
-            # Build mismatch details
+            # Build mismatch details (lot is informational only, never a failure reason)
             mismatches = []
             if not user_matches_qr["item"]:
                 mismatches.append(f"Item (User: {user_input.item_name}, QR: {scanned_data.item})")
@@ -995,8 +1004,6 @@ def cross_verify_qr(request, data: CrossVerificationSchema):
                 mismatches.append(f"Part name (User: {user_input.part_name}, QR: {scanned_data.part.name})")
             if not user_matches_qr["part_maker"]:
                 mismatches.append(f"Maker (User: {user_input.part_maker}, QR: {scanned_data.part.maker})")
-            if not user_matches_qr["lot_no"]:
-                mismatches.append(f"Lot No (User: {user_input.lot_no}, QR: {scanned_data.lot_no})")
             
             # ALWAYS update status to NO_GOOD when user input doesn't match
             # This ensures if it was previously GOOD, it gets changed to NO_GOOD
@@ -1152,6 +1159,128 @@ def generate_qr_code(request, data: QRCreateSchema):
                 }
             }
             
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api.get("/qr/list")
+def list_qr_codes(request):
+    records = QRCode.objects.all().order_by('-created_at')
+    result = []
+    for qr in records:
+        result.append({
+            "qr_uuid": str(qr.qr_uuid),
+            "item": qr.item_name,
+            "part": {
+                "name": qr.part_name,
+                "maker": qr.part_maker
+            },
+            "lot_no": qr.lot_no,
+            "status": qr.status or "PENDING",
+            "created_at": qr.created_at.isoformat(),
+            "verified_at": qr.verified_at.isoformat() if qr.verified_at else None,
+            "qr_image_url": qr.qr_image.url if qr.qr_image else None,
+            "qr_data": qr.generate_qr_data()
+        })
+    return {"count": len(result), "qr_records": result}
+
+
+@api.post("/verify/update-status")
+def update_qr_status(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+        qr_uuid = payload.get("qr_uuid")
+        verification_status = payload.get("verification_status")
+        if not qr_uuid or verification_status not in [QRCode.Status.GOOD, QRCode.Status.NO_GOOD]:
+            return JsonResponse({"error": "Invalid qr_uuid or verification_status"}, status=400)
+
+        qr_record = QRCode.objects.filter(qr_uuid=qr_uuid).first()
+        if not qr_record:
+            return JsonResponse({"error": "QR code not found"}, status=404)
+
+        qr_record.status = verification_status
+        qr_record.verified_at = timezone.now()
+        verified_by = payload.get("verified_by")
+        if verified_by:
+            qr_record.created_by = verified_by
+        qr_record.save(update_fields=["status", "verified_at", "created_by"])
+
+        return {
+            "success": True,
+            "qr_uuid": str(qr_record.qr_uuid),
+            "status": qr_record.status,
+            "verified_at": qr_record.verified_at.isoformat()
+        }
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api.post("/verification/logs")
+def create_verification_log(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+        qr_uuid_raw = payload.get("qr_uuid")
+        if not qr_uuid_raw:
+            return JsonResponse({"error": "qr_uuid is required"}, status=400)
+
+        qr_uuid_val = uuid.UUID(str(qr_uuid_raw))
+        status = payload.get("status")
+        result = payload.get("result")
+        if status not in [VerificationLog.Result.GOOD, VerificationLog.Result.NO_GOOD]:
+            return JsonResponse({"error": "status must be GOOD or NO_GOOD"}, status=400)
+        if result not in [VerificationLog.Result.GOOD, VerificationLog.Result.NO_GOOD]:
+            return JsonResponse({"error": "result must be GOOD or NO_GOOD"}, status=400)
+
+        log = VerificationLog.objects.create(
+            qr_uuid=qr_uuid_val,
+            qr_item=payload.get("qr_item") or payload.get("item_name") or "",
+            part_name=payload.get("part_name"),
+            part_maker=payload.get("part_maker"),
+            lot_no=payload.get("lot_no"),
+            user_item=payload.get("user_item") or "",
+            user_part=payload.get("user_part"),
+            status=status,
+            result=result,
+            backend_updated=bool(payload.get("backend_updated", False)),
+            verified_by=payload.get("verified_by")
+        )
+        return {"success": True, "id": log.id}
+    except ValueError:
+        return JsonResponse({"error": "Invalid qr_uuid format"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api.get("/verification/logs")
+def get_verification_logs(request):
+    logs = VerificationLog.objects.all().order_by("-timestamp")
+    result = []
+    for log in logs:
+        result.append({
+            "id": log.id,
+            "qr_uuid": str(log.qr_uuid),
+            "qr_item": log.qr_item,
+            "part_name": log.part_name,
+            "part_maker": log.part_maker,
+            "lot_no": log.lot_no,
+            "user_item": log.user_item,
+            "status": log.status,
+            "result": log.result,
+            "backend_updated": log.backend_updated,
+            "timestamp": log.timestamp.isoformat(),
+            "verified_by": log.verified_by
+        })
+    return {"count": len(result), "logs": result}
+
+
+@api.delete("/verification/logs/{log_id}")
+def delete_verification_log(request, log_id: int):
+    try:
+        log = VerificationLog.objects.get(pk=log_id)
+        log.delete()
+        return {"success": True, "message": "Verification log deleted"}
+    except VerificationLog.DoesNotExist:
+        return JsonResponse({"error": "Log not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 

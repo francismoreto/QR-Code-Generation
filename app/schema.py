@@ -234,11 +234,11 @@ class ScannedQRDataSchema(Schema):
     status: Optional[str] = None
 
 class UserInputDataSchema(Schema):
-    """User input data for verification"""
+    """User input data for verification (lot_no optional; not used for pass/fail)."""
     item_name: str
     part_name: str
     part_maker: str
-    lot_no: str
+    lot_no: Optional[str] = ""
 
 class CrossVerificationSchema(Schema):
     """
@@ -256,3 +256,23 @@ class CrossVerificationResponseSchema(Schema):
     details: Optional[dict[str, Any]] = None
     mismatches: Optional[List[str]] = None
     qr_data: Optional[dict[str, Any]] = None
+
+
+class VerificationLogSchema(Schema):
+    id: int
+    qr_uuid: str
+    qr_item: str
+    part_name: Optional[str] = None
+    part_maker: Optional[str] = None
+    lot_no: Optional[str] = None
+    user_item: str
+    status: str
+    result: str
+    backend_updated: bool
+    timestamp: datetime
+    verified_by: Optional[str] = None
+
+
+class VerificationLogListResponseSchema(Schema):
+    count: int
+    logs: List[VerificationLogSchema]

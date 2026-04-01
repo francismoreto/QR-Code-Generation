@@ -383,7 +383,6 @@
         if (!item) { userInputError.innerText = 'Item Name is required'; return false; }
         if (!part) { userInputError.innerText = 'Part Name is required'; return false; }
         if (!maker) { userInputError.innerText = 'Part Maker is required'; return false; }
-        if (!lot) { userInputError.innerText = 'Lot Number is required'; return false; }
 
         userInputError.innerText = '';
         return true;
@@ -571,7 +570,8 @@
                     <div class="flex justify-between border-b pb-1"><span class="font-medium">Item:</span><span>User: "${currentUserInput.item_name}" | QR: "${scannedQRData?.item}"</span></div>
                     <div class="flex justify-between border-b pb-1"><span class="font-medium">Part Name:</span><span>User: "${currentUserInput.part_name}" | QR: "${scannedQRData?.part.name}"</span></div>
                     <div class="flex justify-between border-b pb-1"><span class="font-medium">Part Maker:</span><span>User: "${currentUserInput.part_maker}" | QR: "${scannedQRData?.part.maker || 'N/A'}"</span></div>
-                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Lot Number:</span><span>User: "${currentUserInput.lot_no}" | QR: "${scannedQRData?.lot_no}"</span></div>
+                    <div class="flex justify-between border-b pb-1"><span class="font-medium">Lot <span class="font-normal text-gray-500">(reference)</span>:</span><span>User: "${currentUserInput.lot_no || "—"}" | QR: "${scannedQRData?.lot_no}"</span></div>
+                    ${isVerified && status === 'GOOD' && String(currentUserInput.lot_no || '').trim() !== String(scannedQRData?.lot_no || '').trim() ? '<p class="text-xs text-gray-500 mt-1">Lot may differ; pass/fail uses item, part, and maker only.</p>' : ''}
                     <div class="flex justify-between"><span class="font-medium">QR UUID:</span><span class="font-mono text-xs break-all">${scannedQRData?.qr_uuid}</span></div>
                 </div>
             </div>`;
