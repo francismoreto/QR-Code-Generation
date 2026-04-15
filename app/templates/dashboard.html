@@ -903,75 +903,20 @@
     }
 
     async function startQrScanner() {
-        if(html5QrCode && isScanning) {
-            try {
-                await html5QrCode.stop();
-            } catch(e) {
-                console.warn("Error stopping previous scanner:", e);
-            }
-            isScanning = false;
-        }
-        
+        if(html5QrCode&&isScanning) try{await html5QrCode.stop();}catch(e){}
         document.getElementById("verification-result").classList.add("hidden");
         document.getElementById("scan-status").classList.add("hidden");
-        isProcessing = false;
-        
-        const el = document.getElementById("qr-reader"); 
-        while(el.firstChild) el.removeChild(el.firstChild);
-        
-        html5QrCode = new Html5Qrcode("qr-reader");
-        
-        // Optimized configuration for speed
-        const config = {
-            fps: 30,
-            qrbox: { width: 300, height: 300 },
-            aspectRatio: 1.0,
-            disableFlip: false,
-            formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
-            rememberLastUsedCamera: true,
-            showTorchButtonIfSupported: true,
-            showZoomSliderIfSupported: false,
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
-        };
-        
-        try {
-            await html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                onQRCodeScanned,
-                (errorMessage) => {
-                    // Silent error handling for non-critical errors
-                    if (errorMessage && !errorMessage.includes("No MultiFormat Readers")) {
-                        console.debug("QR Scan debug:", errorMessage);
-                    }
-                }
-            );
-            isScanning = true;
-            console.log("QR Scanner started successfully with optimized settings");
-            
-            const restartBtn = document.getElementById("restartScannerBtn");
-            const stopBtn = document.getElementById("stopScannerBtn");
-            if (restartBtn) restartBtn.disabled = false;
-            if (stopBtn) stopBtn.disabled = false;
-            
-        } catch(err) {
+        isProcessing=false;
+        const el=document.getElementById("qr-reader"); while(el.firstChild)el.removeChild(el.firstChild);
+        html5QrCode=new Html5Qrcode("qr-reader");
+        try{
+            await html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},onQRCodeScanned,()=>{});
+            isScanning=true;
+        } catch(err){
             document.getElementById("verification-result").classList.remove("hidden");
-            document.getElementById("verification-result").innerHTML = `
-                <div class="alert alert-error">
-                    <div>
-                        <span>❌</span>
-                        <div>
-                            <h3 class="font-bold">Camera Error</h3>
-                            <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-            isScanning = false;
+            document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p></div></div></div>`;
         }
-}
+    }
 
     async function stopQrScanner(){if(html5QrCode&&isScanning)try{await html5QrCode.stop();isScanning=false;}catch(e){}}
     async function restartScanner(){await stopQrScanner();setTimeout(()=>startQrScanner(),100);}
