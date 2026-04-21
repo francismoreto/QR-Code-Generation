@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>QR Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" /> 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         .sidebar-transition { transition: width 0.3s ease, transform 0.3s ease; }
-        #qr-reader { width: 100%; border-radius: 1rem; overflow: hidden; }
+        #qr-reader { width: 100%; border-radius: 1rem; overflow: hidden; position: relative; }
         #qr-reader video { border-radius: 1rem; width: 100%; object-fit: cover; }
         .scan-region-indicator { position: relative; }
         .scan-region-indicator::after { content: ''; position: absolute; inset: 0; border: 2px solid rgba(0,255,255,0.4); border-radius: 1rem; pointer-events: none; }
@@ -37,7 +37,7 @@
         .qr-detail-qr-box canvas, .qr-detail-qr-box img { width: 100% !important; height: 100% !important; }
         .skeleton-card { background: #f1f5f9; border-radius: 12px; height: 112px; animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        /* Full-page print (Ctrl+P): keep dashboard chrome off the sheet; prefer “Print QR” for labels. */
+        /* Full-page print (Ctrl+P): keep dashboard chrome off the sheet; prefer "Print QR" for labels. */
         @page {
             size: 4in 4in;
             margin: 0.08in;
@@ -656,6 +656,234 @@
     let activeDetailRecord = null;
     let allVerificationLogs = [];
 
+    // ================================================================
+    // PATCH 1 — Native BarcodeDetector fast-path
+    // ================================================================
+    
+    let _nativeBarcodeDetector = null;
+    let _fastScanRAF = null;
+    let _fastScanVideo = null;
+    let _fastScanCanvas = null;
+    let _fastScanCtx = null;
+    let _fastScanActive = false;
+
+    function nativeBarcodeDetectorAvailable() {
+        return typeof BarcodeDetector !== "undefined";
+    }
+
+    async function initNativeBarcodeDetector() {
+        if (!nativeBarcodeDetectorAvailable()) return false;
+        try {
+            const formats = await BarcodeDetector.getSupportedFormats();
+            if (!formats.includes("qr_code")) return false;
+            _nativeBarcodeDetector = new BarcodeDetector({ formats: ["qr_code"] });
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function startFastNativeScanner(videoElement, onDetected) {
+        if (!_nativeBarcodeDetector) return false;
+        _fastScanActive = true;
+        _fastScanVideo = videoElement;
+
+        if (!_fastScanCanvas) {
+            _fastScanCanvas = document.createElement("canvas");
+            _fastScanCtx = _fastScanCanvas.getContext("2d", { willReadFrequently: true });
+        }
+
+        async function tick() {
+            if (!_fastScanActive) return;
+            if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+                try {
+                    const barcodes = await _nativeBarcodeDetector.detect(videoElement);
+                    if (barcodes.length > 0 && _fastScanActive) {
+                        _fastScanActive = false;
+                        onDetected(barcodes[0].rawValue);
+                        return;
+                    }
+                } catch (e) {
+                    // silent — next frame will retry
+                }
+            }
+            _fastScanRAF = requestAnimationFrame(tick);
+        }
+        _fastScanRAF = requestAnimationFrame(tick);
+        return true;
+    }
+
+    function stopFastNativeScanner() {
+        _fastScanActive = false;
+        if (_fastScanRAF) {
+            cancelAnimationFrame(_fastScanRAF);
+            _fastScanRAF = null;
+        }
+    }
+
+    // ================================================================
+    // PATCH 2 — onQRCodeScanned (replaced)
+    // ================================================================
+    
+    async function onQRCodeScanned(decodedText) {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        if (html5QrCode && isScanning) {
+            try { await html5QrCode.pause(true); } catch (e) {}
+        }
+        stopFastNativeScanner();
+
+        document.getElementById("scan-status").classList.remove("hidden");
+
+        const parsed = parseQRData(decodedText);
+        if (!parsed) {
+            document.getElementById("scan-status").classList.add("hidden");
+            const rd = document.getElementById("verification-result");
+            rd.classList.remove("hidden");
+            rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">This QR code does not contain the expected data structure.</p></div></div></div>`;
+            isProcessing = false;
+            return;
+        }
+
+        const vr = await verifyAndUpdateBackend(parsed);
+        document.getElementById("scan-status").classList.add("hidden");
+        displayVerificationResult(vr, parsed);
+        if (!vr.backend_updated) showApiBanner();
+        isProcessing = false;
+    }
+
+    // ================================================================
+    // PATCH 3 — startQrScanner (replaced)
+    // ================================================================
+    
+    async function startQrScanner() {
+        stopFastNativeScanner();
+        if (html5QrCode && isScanning) {
+            try { await html5QrCode.stop(); } catch (e) {}
+            isScanning = false;
+        }
+
+        document.getElementById("verification-result").classList.add("hidden");
+        document.getElementById("scan-status").classList.add("hidden");
+        isProcessing = false;
+
+        const el = document.getElementById("qr-reader");
+        while (el.firstChild) el.removeChild(el.firstChild);
+
+        const nativeReady = await initNativeBarcodeDetector();
+
+        if (nativeReady) {
+            const video = document.createElement("video");
+            video.setAttribute("playsinline", "true");
+            video.setAttribute("muted", "true");
+            video.style.cssText = "width:100%;height:auto;border-radius:1rem;display:block;background:#000;";
+            el.appendChild(video);
+
+            const overlay = document.createElement("div");
+            overlay.style.cssText = "position:absolute;inset:0;border:2px solid rgba(0,255,200,0.5);border-radius:1rem;pointer-events:none;";
+            el.style.position = "relative";
+            el.appendChild(overlay);
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: "environment" },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                video.srcObject = stream;
+                await video.play();
+
+                video._stream = stream;
+                _fastScanVideo = video;
+                isScanning = true;
+
+                await startFastNativeScanner(video, onQRCodeScanned);
+                console.log("QR Scanner started — native BarcodeDetector (fastest)");
+                return;
+            } catch (err) {
+                console.warn("Native camera failed, falling back:", err.message);
+                while (el.firstChild) el.removeChild(el.firstChild);
+            }
+        }
+
+        html5QrCode = new Html5Qrcode("qr-reader");
+
+        const config = {
+            fps: 30,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: false,
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
+        };
+
+        try {
+            await html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                onQRCodeScanned,
+                (errorMessage) => {
+                    if (errorMessage && !errorMessage.includes("No MultiFormat Readers") && !errorMessage.includes("No QR code")) {
+                        console.debug("QR scan frame:", errorMessage);
+                    }
+                }
+            );
+            isScanning = true;
+            console.log("QR Scanner started — html5QrCode fallback");
+        } catch (err) {
+            const rd = document.getElementById("verification-result");
+            rd.classList.remove("hidden");
+            rd.innerHTML = `
+                <div class="alert alert-error">
+                    <div>
+                        <span>❌</span>
+                        <div>
+                            <h3 class="font-bold">Camera Error</h3>
+                            <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
+                        </div>
+                    </div>
+                </div>`;
+            isScanning = false;
+        }
+    }
+
+    // ================================================================
+    // PATCH 4 — stopQrScanner and restartScanner (replaced)
+    // ================================================================
+    
+    async function stopQrScanner() {
+        stopFastNativeScanner();
+
+        if (_fastScanVideo && _fastScanVideo._stream) {
+            _fastScanVideo._stream.getTracks().forEach(t => t.stop());
+            _fastScanVideo._stream = null;
+        }
+        _fastScanVideo = null;
+
+        if (html5QrCode && isScanning) {
+            try { await html5QrCode.stop(); } catch (e) {}
+            isScanning = false;
+        }
+    }
+
+    async function restartScanner() {
+        await stopQrScanner();
+        isProcessing = false;
+        setTimeout(() => startQrScanner(), 100);
+    }
+
+    // ================================================================
+    // END OF PATCHES — remaining original functions continue below
+    // ================================================================
+
     function flattenCustomersToMasterRows(customers) {
         const rows = [];
         (Array.isArray(customers) ? customers : []).forEach((c) => {
@@ -883,44 +1111,6 @@
         } catch(e){return null;}
     }
 
-    async function onQRCodeScanned(decodedText) {
-        if(isProcessing) return; isProcessing=true;
-        if(html5QrCode&&isScanning) try{await html5QrCode.stop();isScanning=false;}catch(e){}
-        document.getElementById("scan-status").classList.remove("hidden");
-        const parsed = parseQRData(decodedText);
-        if(!parsed){
-            document.getElementById("scan-status").classList.add("hidden");
-            document.getElementById("verification-result").classList.remove("hidden");
-            document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3></div></div></div>`;
-            isProcessing=false;
-            return;
-        }
-        const vr = await verifyAndUpdateBackend(parsed);
-        document.getElementById("scan-status").classList.add("hidden");
-        displayVerificationResult(vr, parsed);
-        if(!vr.backend_updated) showApiBanner();
-        isProcessing=false;
-    }
-
-    async function startQrScanner() {
-        if(html5QrCode&&isScanning) try{await html5QrCode.stop();}catch(e){}
-        document.getElementById("verification-result").classList.add("hidden");
-        document.getElementById("scan-status").classList.add("hidden");
-        isProcessing=false;
-        const el=document.getElementById("qr-reader"); while(el.firstChild)el.removeChild(el.firstChild);
-        html5QrCode=new Html5Qrcode("qr-reader");
-        try{
-            await html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},onQRCodeScanned,()=>{});
-            isScanning=true;
-        } catch(err){
-            document.getElementById("verification-result").classList.remove("hidden");
-            document.getElementById("verification-result").innerHTML=`<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Camera Error</h3><p class="text-sm">${err.message}</p></div></div></div>`;
-        }
-    }
-
-    async function stopQrScanner(){if(html5QrCode&&isScanning)try{await html5QrCode.stop();isScanning=false;}catch(e){}}
-    async function restartScanner(){await stopQrScanner();setTimeout(()=>startQrScanner(),100);}
-
     function escCell(s) {
         if (s == null || s === "") return "";
         return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -932,7 +1122,6 @@
         return `<div class="qr-print-label"><h2>${escCell(item)}</h2><p class="qr-print-sub">${sub}</p>${imgHtml}<div class="qr-print-meta"><span class="lbl">Lot No</span><span class="val">${escCell(String(lotNo ?? ""))}</span><span class="lbl">UUID</span><span class="val mono">${escCell(String(uuid ?? ""))}</span></div></div>`;
     }
 
-    /** Styles for the tiny print-only document (iframe). Single 4×4 sheet; no dashboard markup. */
     function getQrLabelPrintDocumentCss() {
         return (
             "@page{size:4in 4in;margin:0.08in}html,body{margin:0;padding:0;width:100%;height:auto;max-height:4in;overflow:hidden;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
@@ -945,10 +1134,6 @@
         );
     }
 
-    /**
-     * Print label in a one-off iframe so the job is only this markup (1 page on 4×4 media).
-     * Browser “headers and footers” (date, title, URL) are a print-dialog setting—uncheck there if they still appear.
-     */
     function runQrLabelPrint(labelInnerHtml) {
         const iframe = document.createElement("iframe");
         iframe.setAttribute("aria-hidden", "true");
@@ -1651,7 +1836,7 @@
         else{s.classList.add('-translate-x-full');o.classList.add('hidden');}
     });
 
-    console.log('QR System Ready — Real-time Verification Updates Enabled');
+    console.log('QR System Ready — Real-time Verification Updates Enabled (with fast BarcodeDetector)');
     </script>
 </body>
 </html>
