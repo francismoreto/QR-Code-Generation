@@ -191,11 +191,25 @@
             border-radius: 0.375rem;
             white-space: nowrap;
         }
+        .debug-console-hint {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 9999;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
 
     <div id="printArea" style="display:none;"></div>
+    <div class="debug-console-hint">📡 Console open? Press F12 for QR debug logs</div>
 
     <div class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-30">
         <div class="flex-1">
@@ -660,7 +674,8 @@
         PARSE: 'color: #f59e0b; font-weight: bold;',
         ERROR: 'color: #ef4444; font-weight: bold;',
         INFO: 'color: #3b82f6; font-weight: bold;',
-        DATA: 'color: #8b5cf6; font-weight: bold;'
+        DATA: 'color: #8b5cf6; font-weight: bold;',
+        SUCCESS: 'color: #22c55e; font-weight: bold;'
     };
 
     function debugLog(category, message, data = null) {
@@ -668,10 +683,105 @@
         console.log(`%c[${category}] ${message}`, style);
         if (data !== null) {
             console.log('  └─ Data:', data);
-            if (typeof data === 'object') {
-                console.table(data);
+            if (typeof data === 'object' && data !== null) {
+                try {
+                    console.table(data);
+                } catch(e) {}
             }
         }
+    }
+
+    // ================================================================
+    // IMPROVED parseQRData - handles your exact backend format
+    // ================================================================
+    
+    function parseQRData(scannedText) {
+        debugLog('PARSE', 'Raw QR text received', scannedText);
+        
+        // Clean the text - remove any BOM characters, trim whitespace
+        let cleanText = scannedText;
+        if (typeof cleanText === 'string') {
+            // Remove UTF-8 BOM if present
+            if (cleanText.charCodeAt(0) === 0xFEFF) {
+                cleanText = cleanText.slice(1);
+                debugLog('PARSE', 'Removed BOM character');
+            }
+            cleanText = cleanText.trim();
+            debugLog('PARSE', 'Cleaned text length: ' + cleanText.length);
+        }
+        
+        // Try to parse JSON
+        let parsedData = null;
+        try {
+            parsedData = JSON.parse(cleanText);
+            debugLog('PARSE', '✓ JSON parsed successfully', parsedData);
+        } catch(e) {
+            debugLog('ERROR', `JSON parse failed: ${e.message}`);
+            debugLog('ERROR', 'Raw text that failed:', cleanText);
+            
+            // Try to fix common issues
+            try {
+                // Attempt to fix single quotes vs double quotes
+                let fixedText = cleanText.replace(/'/g, '"');
+                parsedData = JSON.parse(fixedText);
+                debugLog('SUCCESS', 'Fixed single quotes to double quotes and parsed', parsedData);
+            } catch(e2) {
+                debugLog('ERROR', 'Could not fix JSON format');
+                return null;
+            }
+        }
+        
+        // Extract fields with fallbacks for your exact format
+        const qr_uuid = parsedData.qr_uuid || parsedData.uuid;
+        const item = parsedData.item || parsedData.item_name;
+        
+        let partName = '', partMaker = '';
+        
+        // Handle the nested part object format: {"name": "sample", "maker": "sample"}
+        if (parsedData.part) {
+            partName = parsedData.part.name || parsedData.part.part_name || '';
+            partMaker = parsedData.part.maker || parsedData.part.part_maker || '';
+            debugLog('PARSE', 'Extracted from part object - Name: ' + partName + ', Maker: ' + partMaker);
+        } else {
+            // Handle flat structure
+            partName = parsedData.part_name || '';
+            partMaker = parsedData.part_maker || '';
+            debugLog('PARSE', 'Extracted from flat structure - Name: ' + partName + ', Maker: ' + partMaker);
+        }
+        
+        const lot_no = parsedData.lot_no || parsedData.lotNumber || '';
+        
+        // Log extracted values
+        debugLog('DATA', 'Extracted QR fields:', {
+            qr_uuid: qr_uuid || '(missing)',
+            item: item || '(missing)',
+            partName: partName || '(missing)',
+            partMaker: partMaker || '(missing)',
+            lot_no: lot_no || '(missing)'
+        });
+        
+        // Validate required fields
+        const missingFields = [];
+        if (!qr_uuid) missingFields.push('qr_uuid/uuid');
+        if (!item) missingFields.push('item/item_name');
+        if (!partName) missingFields.push('part.name/part_name');
+        if (!lot_no) missingFields.push('lot_no');
+        
+        if (missingFields.length > 0) {
+            debugLog('ERROR', `Missing required fields: ${missingFields.join(', ')}`);
+            debugLog('ERROR', 'Full parsed object:', parsedData);
+            return null;
+        }
+        
+        debugLog('SUCCESS', '✓ QR data is valid and complete');
+        const result = { 
+            qr_uuid: String(qr_uuid), 
+            item: String(item), 
+            part: { name: String(partName), maker: String(partMaker) }, 
+            lot_no: String(lot_no) 
+        };
+        debugLog('DATA', 'Normalized QR data for verification:', result);
+        return result;
     }
 
     // ================================================================
@@ -749,72 +859,14 @@
     }
 
     // ================================================================
-    // parseQRData with detailed debug logging
-    // ================================================================
-    
-    function parseQRData(scannedText) {
-        debugLog('PARSE', 'Attempting to parse QR data', scannedText);
-        
-        // Check if it's valid JSON first
-        let parsedData = null;
-        try {
-            parsedData = JSON.parse(scannedText);
-            debugLog('PARSE', 'Successfully parsed JSON', parsedData);
-        } catch(e) {
-            debugLog('ERROR', `Failed to parse as JSON: ${e.message}`);
-            debugLog('ERROR', 'Raw text is not valid JSON:', scannedText);
-            return null;
-        }
-        
-        // Extract UUID
-        const qr_uuid = parsedData.qr_uuid || parsedData.uuid;
-        debugLog('PARSE', `Extracted QR UUID: ${qr_uuid || 'MISSING'}`);
-        
-        // Extract item name
-        const item = parsedData.item || parsedData.item_name;
-        debugLog('PARSE', `Extracted Item: ${item || 'MISSING'}`);
-        
-        // Extract part info
-        let partName = '', partMaker = '';
-        if (parsedData.part) {
-            partName = parsedData.part.name;
-            partMaker = parsedData.part.maker || '';
-            debugLog('PARSE', `Extracted from part object - Name: ${partName}, Maker: ${partMaker}`);
-        } else {
-            partName = parsedData.part_name || '';
-            partMaker = parsedData.part_maker || '';
-            debugLog('PARSE', `Extracted from flat structure - Name: ${partName}, Maker: ${partMaker}`);
-        }
-        
-        // Extract lot number
-        const lot_no = parsedData.lot_no;
-        debugLog('PARSE', `Extracted Lot Number: ${lot_no || 'MISSING'}`);
-        
-        // Validate required fields
-        const missingFields = [];
-        if (!qr_uuid) missingFields.push('qr_uuid/uuid');
-        if (!item) missingFields.push('item/item_name');
-        if (!partName) missingFields.push('part.name/part_name');
-        if (!lot_no) missingFields.push('lot_no');
-        
-        if (missingFields.length > 0) {
-            debugLog('ERROR', `Missing required fields: ${missingFields.join(', ')}`);
-            debugLog('ERROR', 'Full parsed object:', parsedData);
-            return null;
-        }
-        
-        debugLog('PARSE', '✓ All required fields present, QR data is valid');
-        const result = { qr_uuid, item, part: { name: partName, maker: partMaker }, lot_no };
-        debugLog('DATA', 'Normalized QR data:', result);
-        return result;
-    }
-
-    // ================================================================
     // onQRCodeScanned with debug logging
     // ================================================================
     
     async function onQRCodeScanned(decodedText) {
-        debugLog('SCAN', 'QR code detected! Raw text length: ' + decodedText.length);
+        debugLog('SCAN', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugLog('SCAN', 'QR CODE DETECTED!');
+        debugLog('SCAN', `Raw text length: ${decodedText.length} characters`);
+        debugLog('SCAN', `Raw text preview: ${decodedText.substring(0, 200)}${decodedText.length > 200 ? '...' : ''}`);
         
         if (isProcessing) {
             debugLog('SCAN', 'Already processing a scan, skipping...');
@@ -834,20 +886,25 @@
         const parsed = parseQRData(decodedText);
         
         if (!parsed) {
-            debugLog('ERROR', 'QR data validation failed - invalid structure');
+            debugLog('ERROR', '❌ QR data validation FAILED - invalid structure');
             document.getElementById("scan-status").classList.add("hidden");
             const rd = document.getElementById("verification-result");
             rd.classList.remove("hidden");
-            rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">The QR code does not contain the expected data structure.<br/><span class="text-xs opacity-70">Check console for details (F12)</span></p></div></div></div>`;
+            rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">The QR code does not contain the expected data structure.<br/><span class="text-xs opacity-70">Expected: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}</span><br/><span class="text-xs opacity-70">Check console (F12) for details</span></p></div></div></div>`;
             isProcessing = false;
             return;
         }
 
-        debugLog('SCAN', 'QR data valid, proceeding with verification');
+        debugLog('SUCCESS', '✓ QR data is valid, proceeding with verification');
         debugLog('INFO', 'User input for verification:', pendingUserInput);
         
         const vr = await verifyAndUpdateBackend(parsed);
-        debugLog('SCAN', `Verification result: ${vr.verified ? 'PASSED' : 'FAILED'}, Backend updated: ${vr.backend_updated}`);
+        debugLog('SCAN', `Verification result: ${vr.verified ? 'PASSED ✓' : 'FAILED ✗'}`);
+        debugLog('SCAN', `Backend updated: ${vr.backend_updated ? 'Yes' : 'No'}`);
+        if (vr.mismatches && vr.mismatches.length > 0) {
+            debugLog('ERROR', 'Mismatches found:', vr.mismatches);
+        }
+        debugLog('SCAN', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
         document.getElementById("scan-status").classList.add("hidden");
         displayVerificationResult(vr, parsed);
@@ -860,6 +917,7 @@
     // ================================================================
     
     async function startQrScanner() {
+        debugLog('INFO', '========================================');
         debugLog('INFO', 'Starting QR scanner...');
         stopFastNativeScanner();
         if (html5QrCode && isScanning) {
@@ -907,7 +965,8 @@
                 isScanning = true;
 
                 await startFastNativeScanner(video, onQRCodeScanned);
-                debugLog('INFO', 'QR Scanner started — native BarcodeDetector (fastest)');
+                debugLog('SUCCESS', 'QR Scanner started — native BarcodeDetector (fastest)');
+                debugLog('INFO', '========================================');
                 return;
             } catch (err) {
                 debugLog('ERROR', `Native camera failed: ${err.message}`);
@@ -938,7 +997,7 @@
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    debugLog('SCAN', 'html5QrCode detected QR:', decodedText.substring(0, 100) + (decodedText.length > 100 ? '...' : ''));
+                    debugLog('SCAN', 'html5QrCode detected QR, length: ' + decodedText.length);
                     onQRCodeScanned(decodedText);
                 },
                 (errorMessage) => {
@@ -949,7 +1008,8 @@
                 }
             );
             isScanning = true;
-            debugLog('INFO', 'QR Scanner started — html5QrCode fallback');
+            debugLog('SUCCESS', 'QR Scanner started — html5QrCode fallback');
+            debugLog('INFO', '========================================');
         } catch (err) {
             debugLog('ERROR', `html5QrCode failed: ${err.message}`);
             const rd = document.getElementById("verification-result");
@@ -997,7 +1057,7 @@
     }
 
     // ================================================================
-    // Remaining original functions (unchanged but kept for completeness)
+    // Remaining original functions (unchanged)
     // ================================================================
 
     function flattenCustomersToMasterRows(customers) {
@@ -1934,7 +1994,9 @@
     });
 
     debugLog('INFO', 'QR System Ready — with enhanced debug logging');
+    debugLog('INFO', 'Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
     console.log('%c📱 Open the browser console (F12) to see QR scan debugging information', 'color: #3b82f6; font-size: 12px;');
+    console.log('%c🎯 Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}', 'color: #f59e0b; font-size: 11px;');
     </script>
 </body>
 </html>
