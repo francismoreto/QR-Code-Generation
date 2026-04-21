@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>QR Admin</title>
+    <title>QR Admin - Enhanced Scanner</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" /> 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
@@ -203,6 +203,17 @@
             border-radius: 4px;
             z-index: 9999;
             pointer-events: none;
+        }
+        .camera-quality-selector {
+            position: absolute;
+            bottom: 80px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -588,9 +599,42 @@
 
     <dialog id="qrScannerModal" class="modal modal-bottom sm:modal-middle">
         <div class="modal-box p-0 overflow-hidden max-w-lg w-full rounded-2xl max-h-[90vh] flex flex-col">
-            <div class="flex justify-between items-center p-4 border-b border-base-200 bg-base-100 sticky top-0 z-10"><h3 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-camera text-primary text-xl"></i><span>QR Code Scanner</span></h3><button onclick="closeQRModal()" class="btn btn-sm btn-circle btn-ghost">✕</button></div>
-            <div class="flex-1 overflow-y-auto"><div class="p-4 bg-base-200"><div id="userInputSummary" class="bg-base-100 p-3 rounded-lg mb-4 text-xs border border-base-300"><p class="font-semibold mb-1"><i class="fas fa-info-circle"></i> Verifying against (User Input):</p><div id="summaryDetails" class="grid grid-cols-2 gap-x-2 gap-y-1 text-base-content/80"></div></div><div id="qr-reader" class="scan-region-indicator w-full bg-black rounded-xl overflow-hidden shadow-inner" style="min-height:300px;"></div><div id="scan-status" class="mt-3 text-sm text-center text-base-content/70 hidden"><div class="loading-spinner mr-2"></div><span>Cross-verifying and updating backend...</span></div><div id="verification-result" class="mt-4 hidden result-animation"></div><div class="flex gap-2 mt-4 justify-between items-center"><button id="restartScannerBtn" class="btn btn-outline btn-sm"><i class="fas fa-sync-alt mr-1"></i>Restart Camera</button><button id="stopScannerBtn" class="btn btn-error btn-sm btn-outline"><i class="fas fa-stop mr-1"></i>Stop Camera</button></div><p class="text-xs text-center text-base-content/60 mt-3">📷 Position QR code in front of camera. Verification happens automatically.</p></div></div>
-            <div class="modal-action p-4 border-t border-base-200 bg-base-100 sticky bottom-0"><button onclick="closeQRModal()" class="btn btn-block">Close</button></div>
+            <div class="flex justify-between items-center p-4 border-b border-base-200 bg-base-100 sticky top-0 z-10">
+                <h3 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-camera text-primary text-xl"></i><span>QR Code Scanner</span></h3>
+                <button onclick="closeQRModal()" class="btn btn-sm btn-circle btn-ghost">✕</button>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <div class="p-4 bg-base-200">
+                    <div id="userInputSummary" class="bg-base-100 p-3 rounded-lg mb-4 text-xs border border-base-300">
+                        <p class="font-semibold mb-1"><i class="fas fa-info-circle"></i> Verifying against (User Input):</p>
+                        <div id="summaryDetails" class="grid grid-cols-2 gap-x-2 gap-y-1 text-base-content/80"></div>
+                    </div>
+                    <div id="qr-reader" class="scan-region-indicator w-full bg-black rounded-xl overflow-hidden shadow-inner" style="min-height:300px;"></div>
+                    <div id="scan-status" class="mt-3 text-sm text-center text-base-content/70 hidden">
+                        <div class="loading-spinner mr-2"></div>
+                        <span>Cross-verifying and updating backend...</span>
+                    </div>
+                    <div id="verification-result" class="mt-4 hidden result-animation"></div>
+                    <div class="flex gap-2 mt-4 justify-between items-center">
+                        <button id="restartScannerBtn" class="btn btn-outline btn-sm"><i class="fas fa-sync-alt mr-1"></i>Restart Camera</button>
+                        <button id="stopScannerBtn" class="btn btn-error btn-sm btn-outline"><i class="fas fa-stop mr-1"></i>Stop Camera</button>
+                    </div>
+                    <div class="mt-3 p-2 bg-info/10 rounded-lg text-xs">
+                        <p class="font-semibold">💡 Tips for better scanning:</p>
+                        <ul class="list-disc list-inside mt-1 space-y-1">
+                            <li>Ensure good lighting on the QR code</li>
+                            <li>Hold the camera steady and at the right distance</li>
+                            <li>Make sure the entire QR code is in frame</li>
+                            <li>Clean the camera lens if needed</li>
+                            <li>Try zooming in/out using pinch gestures</li>
+                        </ul>
+                    </div>
+                    <p class="text-xs text-center text-base-content/60 mt-3">📷 Position QR code in front of camera. Verification happens automatically.</p>
+                </div>
+            </div>
+            <div class="modal-action p-4 border-t border-base-200 bg-base-100 sticky bottom-0">
+                <button onclick="closeQRModal()" class="btn btn-block">Close</button>
+            </div>
         </div>
     </dialog>
 
@@ -697,8 +741,10 @@
     // ================================================================
     
     function parseQRData(scannedText) {
-        debugLog('PARSE', 'Raw QR text received', scannedText);
-        debugLog('PARSE', `Text length: ${scannedText.length} characters`);
+        debugLog('PARSE', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        debugLog('PARSE', 'Raw QR text received');
+        debugLog('PARSE', `Text: "${scannedText}"`);
+        debugLog('PARSE', `Length: ${scannedText.length} characters`);
         
         // Clean the text - remove any BOM characters, trim whitespace
         let cleanText = scannedText;
@@ -712,34 +758,34 @@
             debugLog('PARSE', `Cleaned text length: ${cleanText.length}`);
         }
         
-        // Check if the text is too short (likely a partial scan)
-        if (cleanText.length < 20) {
-            debugLog('WARNING', `Text is very short (${cleanText.length} chars) - likely a partial scan or numeric ID instead of JSON`);
-            debugLog('WARNING', 'This appears to be a numeric value rather than a JSON QR code');
-            
-            // If it's just numbers, it's probably not our QR format
-            if (/^\d+$/.test(cleanText)) {
-                debugLog('ERROR', 'Scanned a numeric value instead of JSON QR code');
-                debugLog('ERROR', 'This QR code might be:');
-                debugLog('ERROR', '  1. A different type of QR code (not the system QR)');
-                debugLog('ERROR', '  2. A damaged/partial scan of the actual QR');
-                debugLog('ERROR', '  3. A test QR code with just an ID number');
-                return null;
-            }
+        // Check if this is a numeric-only scan (partial read)
+        if (/^\d+$/.test(cleanText) && cleanText.length < 15) {
+            debugLog('ERROR', '❌ Scanned a numeric value instead of JSON QR code');
+            debugLog('ERROR', `This appears to be a partial read: "${cleanText}"`);
+            debugLog('ERROR', 'The QR code contains JSON data but the scanner only read part of it');
+            debugLog('ERROR', 'Possible causes:');
+            debugLog('ERROR', '  1. QR code is too small or low resolution');
+            debugLog('ERROR', '  2. Camera is too far or too close');
+            debugLog('ERROR', '  3. Poor lighting conditions');
+            debugLog('ERROR', '  4. QR code is damaged or has low contrast');
+            debugLog('ERROR', '  5. Camera needs cleaning');
+            return null;
         }
         
         // Check if it starts with { (JSON object)
         if (!cleanText.startsWith('{')) {
-            debugLog('WARNING', 'Text does not start with { - not a JSON object');
+            debugLog('WARNING', 'Text does not start with { - not a complete JSON object');
             debugLog('WARNING', `First few characters: ${cleanText.substring(0, 20)}`);
             
             // Try to find JSON within the text (in case there's garbage before/after)
-            const jsonMatch = cleanText.match(/\{.*\}/);
+            const jsonMatch = cleanText.match(/\{.*\}/s);
             if (jsonMatch) {
                 debugLog('PARSE', 'Found JSON-like structure within text:', jsonMatch[0]);
                 cleanText = jsonMatch[0];
             } else {
                 debugLog('ERROR', 'No JSON structure found in scanned text');
+                debugLog('ERROR', 'The scanner may be reading the QR code incorrectly');
+                debugLog('ERROR', 'Try: adjusting distance, lighting, or cleaning the camera');
                 return null;
             }
         }
@@ -817,16 +863,17 @@
             lot_no: String(lot_no) 
         };
         debugLog('DATA', 'Normalized QR data for verification:', result);
+        debugLog('PARSE', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         return result;
     }
 
     // ================================================================
-    // ENHANCED startQrScanner with better settings for larger QR codes
+    // ENHANCED startQrScanner with better settings for text-heavy QR codes
     // ================================================================
     
     async function startQrScanner() {
         debugLog('INFO', '========================================');
-        debugLog('INFO', 'Starting QR scanner...');
+        debugLog('INFO', 'Starting QR scanner with enhanced settings...');
         
         // Clean up any existing scanner
         if (html5QrCode && isScanning) {
@@ -841,46 +888,68 @@
         const el = document.getElementById("qr-reader");
         while (el.firstChild) el.removeChild(el.firstChild);
 
-        // Use html5QrCode with optimized settings for larger QR codes
+        // Use html5QrCode with optimized settings for JSON QR codes
         html5QrCode = new Html5Qrcode("qr-reader");
 
-        // Enhanced configuration for better QR reading
+        // Enhanced configuration for better QR reading of text-heavy codes
         const config = {
-            fps: 20,  // Slightly lower FPS for better quality frames
-            qrbox: { width: 300, height: 300 },  // Larger scan box
+            fps: 15,  // Lower FPS for higher quality frames (better for text)
+            qrbox: { width: 350, height: 350 },  // Larger scan box for full QR capture
             aspectRatio: 1.0,
             disableFlip: false,
             formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
             rememberLastUsedCamera: true,
             showTorchButtonIfSupported: true,
-            showZoomSliderIfSupported: true,  // Allow zoom for better focus
-            defaultZoomValueIfSupported: 1.5,  // Slight zoom to focus on QR
+            showZoomSliderIfSupported: true,
+            defaultZoomValueIfSupported: 1.2,  // Slight zoom to focus on QR
             experimentalFeatures: {
                 useBarCodeDetectorIfSupported: true
+            },
+            // Important: Don't crop the QR code too aggressively
+            videoConstraints: {
+                facingMode: "environment",
+                width: { ideal: 1920, max: 3840 },
+                height: { ideal: 1080, max: 2160 }
             }
         };
 
         try {
             debugLog('INFO', 'Starting html5QrCode with enhanced config for JSON QR codes...');
+            debugLog('INFO', 'Scanner settings:');
+            debugLog('INFO', `  - FPS: ${config.fps} (slower = better quality)`);
+            debugLog('INFO', `  - QR Box: ${config.qrbox.width}x${config.qrbox.height}`);
+            debugLog('INFO', `  - Zoom: ${config.defaultZoomValueIfSupported}x`);
+            
             await html5QrCode.start(
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    debugLog('SCAN', 'html5QrCode detected QR');
-                    debugLog('SCAN', `Raw text length: ${decodedText.length}`);
-                    debugLog('SCAN', `Raw text preview: ${decodedText.substring(0, 100)}${decodedText.length > 100 ? '...' : ''}`);
+                    debugLog('SCAN', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                    debugLog('SCAN', 'QR CODE DETECTED!');
+                    debugLog('SCAN', `Raw text length: ${decodedText.length} characters`);
+                    debugLog('SCAN', `Raw text preview: ${decodedText.substring(0, 150)}${decodedText.length > 150 ? '...' : ''}`);
+                    debugLog('SCAN', `First character: "${decodedText.charAt(0)}" (should be "{")`);
                     
-                    // Check if this looks like a valid JSON QR (starts with { and is long enough)
-                    if (decodedText.startsWith('{') && decodedText.length > 20) {
-                        debugLog('SUCCESS', 'Detected JSON QR code format');
+                    // Check if this looks like a complete JSON QR (starts with { and is long enough)
+                    if (decodedText.startsWith('{') && decodedText.length > 30) {
+                        debugLog('SUCCESS', '✓ Detected complete JSON QR code format');
                         onQRCodeScanned(decodedText);
+                    } else if (decodedText.startsWith('{') && decodedText.length <= 30) {
+                        debugLog('WARNING', '⚠️ Detected JSON but text is very short - possible incomplete read');
+                        debugLog('WARNING', 'Try moving camera closer or further from QR code');
+                        onQRCodeScanned(decodedText); // Still try to parse it
                     } else if (decodedText.length < 20 && /^\d+$/.test(decodedText)) {
-                        debugLog('WARNING', 'Scanned numeric value - this appears to be a different type of QR code');
-                        debugLog('WARNING', 'The system expects JSON QR codes with format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
-                        showToast('Invalid QR: Please scan a system-generated QR code', 'error');
-                        // Don't process this scan, but don't stop scanning
+                        debugLog('ERROR', '❌ Scanned numeric value - incomplete QR read!');
+                        debugLog('ERROR', `Expected JSON starting with "{", got numbers: "${decodedText}"`);
+                        debugLog('ERROR', 'This means the scanner only read part of the QR code');
+                        debugLog('ERROR', 'Suggestions:');
+                        debugLog('ERROR', '  1. Move camera slightly farther away');
+                        debugLog('ERROR', '  2. Ensure good lighting on the QR code');
+                        debugLog('ERROR', '  3. Clean camera lens');
+                        debugLog('ERROR', '  4. Make sure entire QR is in frame');
+                        showToast('⚠️ Partial QR read - please adjust distance/lighting and try again', 'warning');
                     } else {
-                        debugLog('WARNING', 'Scanned QR does not appear to be in expected JSON format');
+                        debugLog('WARNING', '⚠️ Scanned QR does not appear to be in expected format');
                         onQRCodeScanned(decodedText); // Still try to parse it
                     }
                 },
@@ -894,6 +963,7 @@
             isScanning = true;
             debugLog('SUCCESS', 'QR Scanner started successfully');
             debugLog('INFO', 'Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
+            debugLog('INFO', 'If you see numeric values, the camera is not reading the full QR code');
             debugLog('INFO', '========================================');
         } catch (err) {
             debugLog('ERROR', `Failed to start scanner: ${err.message}`);
@@ -919,11 +989,6 @@
     // ================================================================
     
     async function onQRCodeScanned(decodedText) {
-        debugLog('SCAN', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        debugLog('SCAN', 'QR CODE DETECTED!');
-        debugLog('SCAN', `Raw text length: ${decodedText.length} characters`);
-        debugLog('SCAN', `Raw text preview: ${decodedText.substring(0, 200)}${decodedText.length > 200 ? '...' : ''}`);
-        
         if (isProcessing) {
             debugLog('SCAN', 'Already processing a scan, skipping...');
             return;
@@ -946,7 +1011,7 @@
             document.getElementById("scan-status").classList.add("hidden");
             const rd = document.getElementById("verification-result");
             rd.classList.remove("hidden");
-            rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">The QR code does not contain the expected data structure.<br/><span class="text-xs opacity-70">Expected: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}</span><br/><span class="text-xs opacity-70">Check console (F12) for details</span></p></div></div></div>`;
+            rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">The scanner only read part of the QR code.<br/>This usually happens when the QR code is too small or the camera is too close/far.</p><p class="text-xs mt-2"><strong>Try these fixes:</strong><br/>• Move camera slightly farther away<br/>• Ensure good lighting<br/>• Clean camera lens<br/>• Make sure entire QR is in frame</p><p class="text-xs opacity-70 mt-2">Check console (F12) for details</p></div></div></div>`;
             isProcessing = false;
             // Resume scanner after error
             setTimeout(() => {
@@ -967,7 +1032,6 @@
         if (vr.mismatches && vr.mismatches.length > 0) {
             debugLog('ERROR', 'Mismatches found:', vr.mismatches);
         }
-        debugLog('SCAN', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         
         document.getElementById("scan-status").classList.add("hidden");
         displayVerificationResult(vr, parsed);
@@ -1032,7 +1096,7 @@
         toast.className = `alert alert-${type} shadow-lg`;
         toast.innerHTML = `
             <div>
-                <span>${type === 'success' ? '✅' : '❌'}</span>
+                <span>${type === 'success' ? '✅' : type === 'warning' ? '⚠️' : '❌'}</span>
                 <span>${message}</span>
             </div>
         `;
@@ -1945,7 +2009,8 @@
     debugLog('INFO', 'Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
     console.log('%c📱 Open the browser console (F12) to see QR scan debugging information', 'color: #3b82f6; font-size: 12px;');
     console.log('%c🎯 Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}', 'color: #f59e0b; font-size: 11px;');
-    console.log('%c⚠️ If you see numeric values (like 02577906), you\'re scanning a different QR code type', 'color: #ef4444; font-size: 11px;');
+    console.log('%c⚠️ If you see numeric values (like 02577906), the scanner is only reading part of the QR code', 'color: #ef4444; font-size: 11px;');
+    console.log('%c💡 Tips: Move camera farther away, ensure good lighting, clean lens, make sure entire QR is in frame', 'color: #f97316; font-size: 11px;');
     </script>
 </body>
 </html>
