@@ -675,7 +675,8 @@
         ERROR: 'color: #ef4444; font-weight: bold;',
         INFO: 'color: #3b82f6; font-weight: bold;',
         DATA: 'color: #8b5cf6; font-weight: bold;',
-        SUCCESS: 'color: #22c55e; font-weight: bold;'
+        SUCCESS: 'color: #22c55e; font-weight: bold;',
+        WARNING: 'color: #f97316; font-weight: bold;'
     };
 
     function debugLog(category, message, data = null) {
@@ -683,7 +684,7 @@
         console.log(`%c[${category}] ${message}`, style);
         if (data !== null) {
             console.log('  └─ Data:', data);
-            if (typeof data === 'object' && data !== null) {
+            if (typeof data === 'object' && data !== null && !(data instanceof Error)) {
                 try {
                     console.table(data);
                 } catch(e) {}
@@ -692,11 +693,12 @@
     }
 
     // ================================================================
-    // IMPROVED parseQRData - handles your exact backend format
+    // ENHANCED parseQRData - handles partial scans and various formats
     // ================================================================
     
     function parseQRData(scannedText) {
         debugLog('PARSE', 'Raw QR text received', scannedText);
+        debugLog('PARSE', `Text length: ${scannedText.length} characters`);
         
         // Clean the text - remove any BOM characters, trim whitespace
         let cleanText = scannedText;
@@ -707,14 +709,46 @@
                 debugLog('PARSE', 'Removed BOM character');
             }
             cleanText = cleanText.trim();
-            debugLog('PARSE', 'Cleaned text length: ' + cleanText.length);
+            debugLog('PARSE', `Cleaned text length: ${cleanText.length}`);
+        }
+        
+        // Check if the text is too short (likely a partial scan)
+        if (cleanText.length < 20) {
+            debugLog('WARNING', `Text is very short (${cleanText.length} chars) - likely a partial scan or numeric ID instead of JSON`);
+            debugLog('WARNING', 'This appears to be a numeric value rather than a JSON QR code');
+            
+            // If it's just numbers, it's probably not our QR format
+            if (/^\d+$/.test(cleanText)) {
+                debugLog('ERROR', 'Scanned a numeric value instead of JSON QR code');
+                debugLog('ERROR', 'This QR code might be:');
+                debugLog('ERROR', '  1. A different type of QR code (not the system QR)');
+                debugLog('ERROR', '  2. A damaged/partial scan of the actual QR');
+                debugLog('ERROR', '  3. A test QR code with just an ID number');
+                return null;
+            }
+        }
+        
+        // Check if it starts with { (JSON object)
+        if (!cleanText.startsWith('{')) {
+            debugLog('WARNING', 'Text does not start with { - not a JSON object');
+            debugLog('WARNING', `First few characters: ${cleanText.substring(0, 20)}`);
+            
+            // Try to find JSON within the text (in case there's garbage before/after)
+            const jsonMatch = cleanText.match(/\{.*\}/);
+            if (jsonMatch) {
+                debugLog('PARSE', 'Found JSON-like structure within text:', jsonMatch[0]);
+                cleanText = jsonMatch[0];
+            } else {
+                debugLog('ERROR', 'No JSON structure found in scanned text');
+                return null;
+            }
         }
         
         // Try to parse JSON
         let parsedData = null;
         try {
             parsedData = JSON.parse(cleanText);
-            debugLog('PARSE', '✓ JSON parsed successfully', parsedData);
+            debugLog('SUCCESS', '✓ JSON parsed successfully', parsedData);
         } catch(e) {
             debugLog('ERROR', `JSON parse failed: ${e.message}`);
             debugLog('ERROR', 'Raw text that failed:', cleanText);
@@ -723,8 +757,10 @@
             try {
                 // Attempt to fix single quotes vs double quotes
                 let fixedText = cleanText.replace(/'/g, '"');
+                // Fix unquoted keys
+                fixedText = fixedText.replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3');
                 parsedData = JSON.parse(fixedText);
-                debugLog('SUCCESS', 'Fixed single quotes to double quotes and parsed', parsedData);
+                debugLog('SUCCESS', 'Fixed JSON formatting and parsed', parsedData);
             } catch(e2) {
                 debugLog('ERROR', 'Could not fix JSON format');
                 return null;
@@ -785,81 +821,101 @@
     }
 
     // ================================================================
-    // Native BarcodeDetector fast-path
+    // ENHANCED startQrScanner with better settings for larger QR codes
     // ================================================================
     
-    let _nativeBarcodeDetector = null;
-    let _fastScanRAF = null;
-    let _fastScanVideo = null;
-    let _fastScanCanvas = null;
-    let _fastScanCtx = null;
-    let _fastScanActive = false;
+    async function startQrScanner() {
+        debugLog('INFO', '========================================');
+        debugLog('INFO', 'Starting QR scanner...');
+        
+        // Clean up any existing scanner
+        if (html5QrCode && isScanning) {
+            try { await html5QrCode.stop(); } catch (e) {}
+            isScanning = false;
+        }
 
-    function nativeBarcodeDetectorAvailable() {
-        const available = typeof BarcodeDetector !== "undefined";
-        debugLog('INFO', `BarcodeDetector API available: ${available}`);
-        return available;
-    }
+        document.getElementById("verification-result").classList.add("hidden");
+        document.getElementById("scan-status").classList.add("hidden");
+        isProcessing = false;
 
-    async function initNativeBarcodeDetector() {
-        if (!nativeBarcodeDetectorAvailable()) return false;
+        const el = document.getElementById("qr-reader");
+        while (el.firstChild) el.removeChild(el.firstChild);
+
+        // Use html5QrCode with optimized settings for larger QR codes
+        html5QrCode = new Html5Qrcode("qr-reader");
+
+        // Enhanced configuration for better QR reading
+        const config = {
+            fps: 20,  // Slightly lower FPS for better quality frames
+            qrbox: { width: 300, height: 300 },  // Larger scan box
+            aspectRatio: 1.0,
+            disableFlip: false,
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true,  // Allow zoom for better focus
+            defaultZoomValueIfSupported: 1.5,  // Slight zoom to focus on QR
+            experimentalFeatures: {
+                useBarCodeDetectorIfSupported: true
+            }
+        };
+
         try {
-            const formats = await BarcodeDetector.getSupportedFormats();
-            debugLog('INFO', `Supported barcode formats: ${formats.join(', ')}`);
-            if (!formats.includes("qr_code")) {
-                debugLog('ERROR', 'QR code format not supported by native detector');
-                return false;
-            }
-            _nativeBarcodeDetector = new BarcodeDetector({ formats: ["qr_code"] });
-            debugLog('INFO', 'Native BarcodeDetector initialized successfully');
-            return true;
-        } catch (e) {
-            debugLog('ERROR', `Failed to initialize BarcodeDetector: ${e.message}`);
-            return false;
-        }
-    }
-
-    async function startFastNativeScanner(videoElement, onDetected) {
-        if (!_nativeBarcodeDetector) return false;
-        _fastScanActive = true;
-        _fastScanVideo = videoElement;
-
-        if (!_fastScanCanvas) {
-            _fastScanCanvas = document.createElement("canvas");
-            _fastScanCtx = _fastScanCanvas.getContext("2d", { willReadFrequently: true });
-        }
-
-        async function tick() {
-            if (!_fastScanActive) return;
-            if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
-                try {
-                    const barcodes = await _nativeBarcodeDetector.detect(videoElement);
-                    if (barcodes.length > 0 && _fastScanActive) {
-                        debugLog('SCAN', `Native detector found ${barcodes.length} barcode(s)`);
-                        _fastScanActive = false;
-                        onDetected(barcodes[0].rawValue);
-                        return;
+            debugLog('INFO', 'Starting html5QrCode with enhanced config for JSON QR codes...');
+            await html5QrCode.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    debugLog('SCAN', 'html5QrCode detected QR');
+                    debugLog('SCAN', `Raw text length: ${decodedText.length}`);
+                    debugLog('SCAN', `Raw text preview: ${decodedText.substring(0, 100)}${decodedText.length > 100 ? '...' : ''}`);
+                    
+                    // Check if this looks like a valid JSON QR (starts with { and is long enough)
+                    if (decodedText.startsWith('{') && decodedText.length > 20) {
+                        debugLog('SUCCESS', 'Detected JSON QR code format');
+                        onQRCodeScanned(decodedText);
+                    } else if (decodedText.length < 20 && /^\d+$/.test(decodedText)) {
+                        debugLog('WARNING', 'Scanned numeric value - this appears to be a different type of QR code');
+                        debugLog('WARNING', 'The system expects JSON QR codes with format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
+                        showToast('Invalid QR: Please scan a system-generated QR code', 'error');
+                        // Don't process this scan, but don't stop scanning
+                    } else {
+                        debugLog('WARNING', 'Scanned QR does not appear to be in expected JSON format');
+                        onQRCodeScanned(decodedText); // Still try to parse it
                     }
-                } catch (e) {
-                    // silent — next frame will retry
+                },
+                (errorMessage) => {
+                    // Only log significant errors
+                    if (errorMessage && !errorMessage.includes("No MultiFormat Readers") && !errorMessage.includes("No QR code")) {
+                        debugLog('INFO', `html5QrCode: ${errorMessage.substring(0, 100)}`);
+                    }
                 }
-            }
-            _fastScanRAF = requestAnimationFrame(tick);
-        }
-        _fastScanRAF = requestAnimationFrame(tick);
-        return true;
-    }
-
-    function stopFastNativeScanner() {
-        _fastScanActive = false;
-        if (_fastScanRAF) {
-            cancelAnimationFrame(_fastScanRAF);
-            _fastScanRAF = null;
+            );
+            isScanning = true;
+            debugLog('SUCCESS', 'QR Scanner started successfully');
+            debugLog('INFO', 'Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
+            debugLog('INFO', '========================================');
+        } catch (err) {
+            debugLog('ERROR', `Failed to start scanner: ${err.message}`);
+            const rd = document.getElementById("verification-result");
+            rd.classList.remove("hidden");
+            rd.innerHTML = `
+                <div class="alert alert-error">
+                    <div>
+                        <span>❌</span>
+                        <div>
+                            <h3 class="font-bold">Camera Error</h3>
+                            <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
+                            <p class="text-xs mt-1">Make sure you're on HTTPS or localhost, and have granted camera permissions.</p>
+                        </div>
+                    </div>
+                </div>`;
+            isScanning = false;
         }
     }
 
     // ================================================================
-    // onQRCodeScanned with debug logging
+    // onQRCodeScanned with better error handling
     // ================================================================
     
     async function onQRCodeScanned(decodedText) {
@@ -874,11 +930,11 @@
         }
         isProcessing = true;
 
+        // Pause scanner while processing
         if (html5QrCode && isScanning) {
-            debugLog('SCAN', 'Pausing html5QrCode scanner');
+            debugLog('SCAN', 'Pausing scanner during processing');
             try { await html5QrCode.pause(true); } catch (e) {}
         }
-        stopFastNativeScanner();
 
         document.getElementById("scan-status").classList.remove("hidden");
 
@@ -892,6 +948,13 @@
             rd.classList.remove("hidden");
             rd.innerHTML = `<div class="alert alert-error"><div><span>❌</span><div><h3 class="font-bold">Invalid QR Format</h3><p class="text-sm">The QR code does not contain the expected data structure.<br/><span class="text-xs opacity-70">Expected: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}</span><br/><span class="text-xs opacity-70">Check console (F12) for details</span></p></div></div></div>`;
             isProcessing = false;
+            // Resume scanner after error
+            setTimeout(() => {
+                if (html5QrCode && !isScanning) {
+                    html5QrCode.resume().catch(e => debugLog('ERROR', 'Failed to resume scanner', e));
+                    isScanning = true;
+                }
+            }, 2000);
             return;
         }
 
@@ -910,122 +973,14 @@
         displayVerificationResult(vr, parsed);
         if (!vr.backend_updated) showApiBanner();
         isProcessing = false;
-    }
-
-    // ================================================================
-    // startQrScanner with debug logging
-    // ================================================================
-    
-    async function startQrScanner() {
-        debugLog('INFO', '========================================');
-        debugLog('INFO', 'Starting QR scanner...');
-        stopFastNativeScanner();
-        if (html5QrCode && isScanning) {
-            try { await html5QrCode.stop(); } catch (e) {}
-            isScanning = false;
-        }
-
-        document.getElementById("verification-result").classList.add("hidden");
-        document.getElementById("scan-status").classList.add("hidden");
-        isProcessing = false;
-
-        const el = document.getElementById("qr-reader");
-        while (el.firstChild) el.removeChild(el.firstChild);
-
-        const nativeReady = await initNativeBarcodeDetector();
-
-        if (nativeReady) {
-            debugLog('INFO', 'Attempting native BarcodeDetector path...');
-            const video = document.createElement("video");
-            video.setAttribute("playsinline", "true");
-            video.setAttribute("muted", "true");
-            video.style.cssText = "width:100%;height:auto;border-radius:1rem;display:block;background:#000;";
-            el.appendChild(video);
-
-            const overlay = document.createElement("div");
-            overlay.style.cssText = "position:absolute;inset:0;border:2px solid rgba(0,255,200,0.5);border-radius:1rem;pointer-events:none;";
-            el.style.position = "relative";
-            el.appendChild(overlay);
-
-            try {
-                debugLog('INFO', 'Requesting camera access for native scanner...');
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: { ideal: "environment" },
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                });
-                video.srcObject = stream;
-                await video.play();
-                debugLog('INFO', 'Camera stream active, native scanner running');
-
-                video._stream = stream;
-                _fastScanVideo = video;
+        
+        // Resume scanner after processing
+        setTimeout(() => {
+            if (html5QrCode && !isScanning) {
+                html5QrCode.resume().catch(e => debugLog('ERROR', 'Failed to resume scanner', e));
                 isScanning = true;
-
-                await startFastNativeScanner(video, onQRCodeScanned);
-                debugLog('SUCCESS', 'QR Scanner started — native BarcodeDetector (fastest)');
-                debugLog('INFO', '========================================');
-                return;
-            } catch (err) {
-                debugLog('ERROR', `Native camera failed: ${err.message}`);
-                while (el.firstChild) el.removeChild(el.firstChild);
             }
-        }
-
-        debugLog('INFO', 'Falling back to html5QrCode...');
-        html5QrCode = new Html5Qrcode("qr-reader");
-
-        const config = {
-            fps: 30,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-            disableFlip: false,
-            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-            rememberLastUsedCamera: true,
-            showTorchButtonIfSupported: true,
-            showZoomSliderIfSupported: false,
-            experimentalFeatures: {
-                useBarCodeDetectorIfSupported: true
-            }
-        };
-
-        try {
-            debugLog('INFO', 'Starting html5QrCode with config:', config);
-            await html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText) => {
-                    debugLog('SCAN', 'html5QrCode detected QR, length: ' + decodedText.length);
-                    onQRCodeScanned(decodedText);
-                },
-                (errorMessage) => {
-                    // Only log significant errors
-                    if (errorMessage && !errorMessage.includes("No MultiFormat Readers") && !errorMessage.includes("No QR code")) {
-                        debugLog('INFO', `html5QrCode frame: ${errorMessage.substring(0, 100)}`);
-                    }
-                }
-            );
-            isScanning = true;
-            debugLog('SUCCESS', 'QR Scanner started — html5QrCode fallback');
-            debugLog('INFO', '========================================');
-        } catch (err) {
-            debugLog('ERROR', `html5QrCode failed: ${err.message}`);
-            const rd = document.getElementById("verification-result");
-            rd.classList.remove("hidden");
-            rd.innerHTML = `
-                <div class="alert alert-error">
-                    <div>
-                        <span>❌</span>
-                        <div>
-                            <h3 class="font-bold">Camera Error</h3>
-                            <p class="text-sm">${err.message || "Could not access camera. Please check permissions."}</p>
-                        </div>
-                    </div>
-                </div>`;
-            isScanning = false;
-        }
+        }, 1000);
     }
 
     // ================================================================
@@ -1034,13 +989,6 @@
     
     async function stopQrScanner() {
         debugLog('INFO', 'Stopping QR scanner...');
-        stopFastNativeScanner();
-
-        if (_fastScanVideo && _fastScanVideo._stream) {
-            _fastScanVideo._stream.getTracks().forEach(t => t.stop());
-            _fastScanVideo._stream = null;
-        }
-        _fastScanVideo = null;
 
         if (html5QrCode && isScanning) {
             try { await html5QrCode.stop(); } catch (e) {}
@@ -1057,7 +1005,7 @@
     }
 
     // ================================================================
-    // Remaining original functions (unchanged)
+    // Remaining original functions (keep as is)
     // ================================================================
 
     function flattenCustomersToMasterRows(customers) {
@@ -1993,10 +1941,11 @@
         else{s.classList.add('-translate-x-full');o.classList.add('hidden');}
     });
 
-    debugLog('INFO', 'QR System Ready — with enhanced debug logging');
+    debugLog('INFO', 'QR System Ready — with enhanced QR scanning for JSON format');
     debugLog('INFO', 'Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}');
     console.log('%c📱 Open the browser console (F12) to see QR scan debugging information', 'color: #3b82f6; font-size: 12px;');
     console.log('%c🎯 Expected QR format: {"qr_uuid":"...", "item":"...", "part":{"name":"...","maker":"..."}, "lot_no":"..."}', 'color: #f59e0b; font-size: 11px;');
+    console.log('%c⚠️ If you see numeric values (like 02577906), you\'re scanning a different QR code type', 'color: #ef4444; font-size: 11px;');
     </script>
 </body>
 </html>
