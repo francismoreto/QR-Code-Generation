@@ -693,13 +693,18 @@
 
     document.getElementById("logoutBtn")?.addEventListener("click", (e) => { e.preventDefault(); sessionStorage.removeItem("employee"); window.location.href = "/login"; });
 
-    const API_BASE_URL           = "http://127.0.0.1:8000";
-    const FULL_API_URL           = API_BASE_URL + "/api/verify/cross-check";
-    const UPDATE_STATUS_URL      = API_BASE_URL + "/api/verify/update-status";
-    const GENERATE_API_URL       = API_BASE_URL + "/api/qr/generate";
-    const MASTER_SELECTION_URL   = API_BASE_URL + "/api/qr/selection/customers";
-    const LIST_QR_URL            = API_BASE_URL + "/api/qr/list";
-    const VERIFICATION_LOGS_URL  = API_BASE_URL + "/api/verification/logs";
+    // Use the current origin (where the frontend is served from)
+const API_BASE_URL = window.location.origin;
+
+// Or if your Django backend is on a different port in Codespaces
+// const API_BASE_URL = 'https://special-guacamole-4jv9w46gwxp9cj6r9-8000.app.github.dev';
+
+    const FULL_API_URL           = `${API_BASE_URL}/api/verify/cross-check`;
+    const UPDATE_STATUS_URL      = `${API_BASE_URL}/api/verify/update-status`;
+    const GENERATE_API_URL       = `${API_BASE_URL}/api/qr/generate`;
+    const MASTER_SELECTION_URL   = `${API_BASE_URL}/api/qr/selection/customers`;
+    const LIST_QR_URL            = `${API_BASE_URL}/api/qr/list`;
+    const VERIFICATION_LOGS_URL  = `${API_BASE_URL}/api/verification/logs`;
 
     let html5QrCode = null, isScanning = false, isProcessing = false;
     let scanCount = 0, verifiedCount = 0, nogoodCount = 0;
