@@ -73,6 +73,15 @@
             background: #fef3c7;
             border-left: 4px solid #f59e0b;
         }
+        .output-master-scroll {
+            max-height: min(42vh, 320px);
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+        }
+        .output-master-row { cursor: pointer; transition: background 0.15s ease; }
+        .output-master-row:hover { background: #f3f4f6; }
+        .output-master-row-selected { background: #dbeafe !important; }
     </style>
 </head>
 <body class="font-sans antialiased flex flex-col items-center justify-start p-4 md:p-6">
@@ -84,13 +93,6 @@
         <!-- ✅ DaisyUI Navbar -->
         <div class="navbar bg-base-100 border-b border-gray-200 px-4">
             <!-- Left: hamburger (decorative / future menu) -->
-            <div class="flex-none">
-                <button class="btn btn-square btn-ghost">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                    </svg>
-                </button>
-            </div>
 
             <!-- Center: Title -->
             <div class="flex-1">
@@ -138,41 +140,56 @@
 
         <!-- Dynamic Content Area -->
         <div class="p-6 md:p-7 bg-white">
-            <!-- 1️⃣ USER INPUT SCREEN -->
+            <!-- 1️⃣ MASTER LIST + LOT (same data as admin QR Verify) -->
             <div id="userInputScreen" class="transition-fade">
-                <div class="mb-5">
+                <p class="text-sm text-gray-600 mb-4">
+                    <i class="fas fa-info-circle text-blue-500 mr-1"></i>
+                    Search the master list, then <strong class="font-semibold">tap a row</strong> to open the camera and scan. Item, part, and maker come from the selected row; lot number is optional.
+                </p>
+                <div class="mb-4">
                     <label class="block text-gray-700 font-semibold mb-2 text-sm">
-                        <i class="fas fa-box mr-2 text-blue-600"></i>Item Name
+                        <i class="fas fa-barcode mr-2 text-blue-600"></i>Lot number <span class="text-gray-500 font-normal">(optional)</span>
                     </label>
-                    <input type="text" id="itemNameInput" placeholder="e.g., Laptop, Smartphone, Tablet"
+                    <input type="text" id="lotNoInput" placeholder="e.g., LOT-2024-001 — not required to match QR"
                            class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
                 </div>
-                <div class="mb-5">
-                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
-                        <i class="fas fa-microchip mr-2 text-blue-600"></i>Part Name
-                    </label>
-                    <input type="text" id="partNameInput" placeholder="e.g., CPU, GPU, Battery"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-list-ul text-blue-600"></i> Master list (items &amp; parts)
+                    </h3>
+                    <button type="button" id="outputMasterRefreshBtn" class="btn btn-ghost btn-xs gap-1 shrink-0">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
                 </div>
-                <div class="mb-5">
-                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
-                        <i class="fas fa-industry mr-2 text-blue-600"></i>Part Maker
-                    </label>
-                    <input type="text" id="partMakerInput" placeholder="e.g., Intel, AMD, Samsung"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                <div class="relative mb-2">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none"></i>
+                    <input type="text" id="outputMasterSearch" autocomplete="off" placeholder="Filter by customer, item, part, maker…"
+                           class="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
                 </div>
-                <div class="mb-6">
-                    <label class="block text-gray-700 font-semibold mb-2 text-sm">
-                        <i class="fas fa-barcode mr-2 text-blue-600"></i>Lot Number
-                    </label>
-                    <input type="text" id="lotNoInput" placeholder="e.g., LOT-2024-001"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-400 transition">
+                <div id="outputMasterLoading" class="hidden py-8 text-center text-sm text-gray-500">
+                    <div class="spinner mx-auto mb-2"></div> Loading master list…
                 </div>
-                <div id="userInputError" class="text-red-500 text-sm mb-3 min-h-[24px]"></div>
-                <button id="proceedToScanBtn"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
-                    <i class="fas fa-camera"></i> Proceed to Scan QR Code
-                </button>
+                <div id="outputMasterError" class="hidden rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs px-3 py-2 mb-2">
+                    <i class="fas fa-exclamation-triangle mr-1"></i><span id="outputMasterErrorMsg"></span>
+                </div>
+                <div id="outputMasterEmpty" class="hidden rounded-xl border border-gray-200 bg-gray-50 text-gray-600 text-xs px-3 py-2 mb-2">
+                    <i class="fas fa-inbox mr-1"></i> No rows yet. Ask an admin to register customers, items, and materials.
+                </div>
+                <div id="outputMasterTableWrap" class="hidden output-master-scroll mb-3">
+                    <table class="table table-sm w-full">
+                        <thead class="sticky top-0 z-[1] bg-gray-100/95 backdrop-blur">
+                            <tr>
+                                <th class="text-xs text-gray-700">Customer</th>
+                                <th class="text-xs text-gray-700">Item</th>
+                                <th class="text-xs text-gray-700">Part</th>
+                                <th class="text-xs text-gray-700">Maker</th>
+                            </tr>
+                        </thead>
+                        <tbody id="outputMasterBody"></tbody>
+                    </table>
+                </div>
+                <p id="outputMasterNoMatch" class="hidden text-xs text-center text-gray-500 py-2 mb-2">No rows match your filter.</p>
+                <div id="userInputError" class="text-red-500 text-sm mb-1 min-h-[24px]"></div>
             </div>
 
             <!-- 2️⃣ QR SCANNER SCREEN -->
@@ -211,7 +228,7 @@
 
                 <button id="backToUserFromScannerBtn"
                         class="w-full mt-3 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 py-2.5 rounded-xl transition hover:bg-gray-50 flex items-center justify-center gap-1">
-                    <i class="fas fa-arrow-left"></i> Edit User Input
+                    <i class="fas fa-arrow-left"></i> Back to master list
                 </button>
 
                 <div id="scannerStatus" class="mt-4 text-center text-sm font-medium min-h-[48px]"></div>
@@ -278,12 +295,17 @@
     const scannerScreen = document.getElementById('scannerScreen');
     const resultScreen = document.getElementById('resultScreen');
 
-    const itemNameInput = document.getElementById('itemNameInput');
-    const partNameInput = document.getElementById('partNameInput');
-    const partMakerInput = document.getElementById('partMakerInput');
     const lotNoInput = document.getElementById('lotNoInput');
     const userInputError = document.getElementById('userInputError');
-    const proceedBtn = document.getElementById('proceedToScanBtn');
+    const outputMasterSearch = document.getElementById('outputMasterSearch');
+    const outputMasterBody = document.getElementById('outputMasterBody');
+    const outputMasterLoading = document.getElementById('outputMasterLoading');
+    const outputMasterError = document.getElementById('outputMasterError');
+    const outputMasterErrorMsg = document.getElementById('outputMasterErrorMsg');
+    const outputMasterEmpty = document.getElementById('outputMasterEmpty');
+    const outputMasterTableWrap = document.getElementById('outputMasterTableWrap');
+    const outputMasterNoMatch = document.getElementById('outputMasterNoMatch');
+    const outputMasterRefreshBtn = document.getElementById('outputMasterRefreshBtn');
 
     const verifyScannedBtn = document.getElementById('verifyScannedBtn');
     const rescanBtn = document.getElementById('rescanBtn');
@@ -308,9 +330,11 @@
     const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
 
     // ======================== API Configuration ========================
-    const API_BASE_URL = "http://127.0.0.1:8000";
+    const API_BASE_URL = window.location.origin;
     const VERIFY_ENDPOINT = "/api/verify/cross-check";
+    const MASTER_SELECTION_ENDPOINT = "/api/qr/selection/customers";
     const FULL_API_URL = API_BASE_URL + VERIFY_ENDPOINT;
+    const MASTER_SELECTION_URL = API_BASE_URL + MASTER_SELECTION_ENDPOINT;
     // Login page redirect URL (can be configured as needed)
     const LOGIN_REDIRECT_URL = "/login";
 
@@ -319,6 +343,111 @@
     let scannedQRData = null;
     let html5QrCode = null;
     let isScanning = false;
+
+    let masterListRows = [];
+    let selectedMasterIdx = null;
+
+    function flattenCustomersToMasterRows(customers) {
+        const rows = [];
+        (Array.isArray(customers) ? customers : []).forEach((c) => {
+            (c.items || []).forEach((it) => {
+                (it.partnames || []).forEach((p) => {
+                    if (p.part_name) {
+                        rows.push({
+                            customer_name: c.customer_name || "",
+                            item: it.item || "",
+                            part_name: p.part_name,
+                            maker: p.maker || "",
+                        });
+                    }
+                });
+            });
+        });
+        return rows;
+    }
+
+    function escCell(s) {
+        if (s == null || s === "") return "";
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function getFilteredMasterIndices() {
+        const q = (outputMasterSearch?.value || "").toLowerCase().trim();
+        if (!q) return masterListRows.map((_, i) => i);
+        return masterListRows
+            .map((r, i) => {
+                const hay = `${r.customer_name} ${r.item} ${r.part_name} ${r.maker}`.toLowerCase();
+                return hay.includes(q) ? i : -1;
+            })
+            .filter((i) => i >= 0);
+    }
+
+    function renderOutputMasterList() {
+        if (!outputMasterBody || !outputMasterNoMatch || !outputMasterTableWrap) return;
+        const indices = getFilteredMasterIndices();
+        if (selectedMasterIdx !== null && !indices.includes(selectedMasterIdx)) selectedMasterIdx = null;
+        outputMasterBody.innerHTML = "";
+        if (masterListRows.length === 0) return;
+        if (indices.length === 0) {
+            outputMasterNoMatch.classList.remove("hidden");
+            return;
+        }
+        outputMasterNoMatch.classList.add("hidden");
+        indices.forEach((idx) => {
+            const r = masterListRows[idx];
+            const tr = document.createElement("tr");
+            tr.className = "output-master-row" + (selectedMasterIdx === idx ? " output-master-row-selected" : "");
+            tr.tabIndex = 0;
+            tr.innerHTML = `<td class="text-xs">${escCell(r.customer_name)}</td><td class="text-xs font-medium text-gray-800">${escCell(r.item)}</td><td class="text-xs">${escCell(r.part_name)}</td><td class="text-xs">${escCell(r.maker)}</td>`;
+            tr.addEventListener("click", () => onOutputMasterRowSelected(idx));
+            tr.addEventListener("keydown", (ev) => {
+                if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    onOutputMasterRowSelected(idx);
+                }
+            });
+            outputMasterBody.appendChild(tr);
+        });
+    }
+
+    async function onOutputMasterRowSelected(idx) {
+        selectedMasterIdx = idx;
+        renderOutputMasterList();
+        await switchToScannerScreen();
+    }
+
+    async function loadOutputMasterList() {
+        if (!outputMasterLoading || !outputMasterError || !outputMasterEmpty || !outputMasterTableWrap) return;
+        outputMasterError.classList.add("hidden");
+        outputMasterEmpty.classList.add("hidden");
+        outputMasterTableWrap.classList.add("hidden");
+        outputMasterNoMatch?.classList.add("hidden");
+        outputMasterLoading.classList.remove("hidden");
+        try {
+            const resp = await fetch(MASTER_SELECTION_URL, { method: "GET", headers: { Accept: "application/json" } });
+            if (!resp.ok) throw new Error("Server returned " + resp.status);
+            const data = await resp.json();
+            masterListRows = flattenCustomersToMasterRows(Array.isArray(data) ? data : []);
+            outputMasterLoading.classList.add("hidden");
+            selectedMasterIdx = null;
+            if (masterListRows.length === 0) {
+                outputMasterEmpty.classList.remove("hidden");
+                renderOutputMasterList();
+                return;
+            }
+            outputMasterTableWrap.classList.remove("hidden");
+            renderOutputMasterList();
+        } catch (e) {
+            outputMasterLoading.classList.add("hidden");
+            outputMasterError.classList.remove("hidden");
+            outputMasterErrorMsg.textContent = e.message || "Could not load master list.";
+            if (masterListRows.length > 0) {
+                outputMasterEmpty.classList.add("hidden");
+                outputMasterTableWrap.classList.remove("hidden");
+                renderOutputMasterList();
+            }
+        }
+    }
 
     // ======================== Helper: Redirect to Login ========================
     function redirectToLogin() {
@@ -374,16 +503,18 @@
             : `<i class="fas fa-circle-info text-blue-400"></i> ${msg}`;
     }
 
-    function validateUserInput() {
-        const item = itemNameInput.value.trim();
-        const part = partNameInput.value.trim();
-        const maker = partMakerInput.value.trim();
-        const lot = lotNoInput.value.trim();
-
-        if (!item) { userInputError.innerText = 'Item Name is required'; return false; }
-        if (!part) { userInputError.innerText = 'Part Name is required'; return false; }
-        if (!maker) { userInputError.innerText = 'Part Maker is required'; return false; }
-
+    function validateMasterSelection() {
+        if (selectedMasterIdx === null || !masterListRows[selectedMasterIdx]) {
+            userInputError.innerText = 'Select a row from the master list.';
+            return false;
+        }
+        const r = masterListRows[selectedMasterIdx];
+        const item = (r.item || "").trim();
+        const part = (r.part_name || "").trim();
+        const maker = (r.maker || "").trim();
+        if (!item) { userInputError.innerText = 'Selected row is missing item name.'; return false; }
+        if (!part) { userInputError.innerText = 'Selected row is missing part name.'; return false; }
+        if (!maker) { userInputError.innerText = 'Selected row is missing part maker.'; return false; }
         userInputError.innerText = '';
         return true;
     }
@@ -467,11 +598,12 @@
     }
 
     async function switchToScannerScreen() {
-        if (!validateUserInput()) { setFooterMessage("Please fill all user input fields correctly", true); return; }
+        if (!validateMasterSelection()) { setFooterMessage("Pick a master list row with item, part, and maker", true); return; }
+        const r = masterListRows[selectedMasterIdx];
         currentUserInput = {
-            item_name: itemNameInput.value.trim(),
-            part_name: partNameInput.value.trim(),
-            part_maker: partMakerInput.value.trim(),
+            item_name: r.item.trim(),
+            part_name: r.part_name.trim(),
+            part_maker: (r.maker || "").trim(),
             lot_no: lotNoInput.value.trim()
         };
         scannedQRData = null;
@@ -602,11 +734,10 @@
 
     async function fullReset() {
         await stopScanner();
-        itemNameInput.value = '';
-        partNameInput.value = '';
-        partMakerInput.value = '';
         lotNoInput.value = '';
+        if (outputMasterSearch) outputMasterSearch.value = '';
         userInputError.innerText = '';
+        selectedMasterIdx = null;
         currentUserInput = { item_name: '', part_name: '', part_maker: '', lot_no: '' };
         scannedQRData = null;
         scannedDataPreview.classList.add('hidden');
@@ -615,7 +746,8 @@
         resultScreen.classList.add('hidden');
         viewTitle.innerText = 'QR Scanner Verification';
         viewSubtitle.innerText = 'Scan QR Code & Cross-Verify with Database';
-        setFooterMessage('Ready. Enter item details and proceed to scan.');
+        renderOutputMasterList();
+        setFooterMessage('Ready. Search the master list and tap a row to scan.');
     }
 
     async function backToUserInput() {
@@ -624,12 +756,13 @@
         scannerScreen.classList.add('hidden');
         resultScreen.classList.add('hidden');
         viewTitle.innerText = 'QR Scanner Verification';
-        viewSubtitle.innerText = 'Enter item & part details';
-        setFooterMessage('Editing user input');
+        viewSubtitle.innerText = 'Search master list & tap a row to scan';
+        setFooterMessage('Back at master list — tap a row to scan again.');
     }
 
     // Event Bindings
-    proceedBtn.addEventListener('click', switchToScannerScreen);
+    outputMasterSearch?.addEventListener("input", () => renderOutputMasterList());
+    outputMasterRefreshBtn?.addEventListener("click", () => loadOutputMasterList());
     verifyScannedBtn.addEventListener('click', callCrossVerificationAPI);
     rescanBtn.addEventListener('click', rescan);
     backToUserFromScannerBtn.addEventListener('click', backToUserInput);
@@ -656,7 +789,8 @@
     
     // Initialize
     updateApiDisplay();
-    setFooterMessage(`API: ${FULL_API_URL} | Enter details, then scan QR code.`);
+    setFooterMessage(`API: ${FULL_API_URL} | Master list + tap row to scan.`);
+    loadOutputMasterList();
 </script>
 </body>
 </html>
