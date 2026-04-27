@@ -237,18 +237,39 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
     """
     Bulk upload customer/item/part data from CSV or XLSX.
 
-    Expected mapping from uploaded file:
-    - first column -> customer name
-    - PartCode -> item
-    - MaterialsCode -> part_name
-    - Maker -> maker
+    Correct Excel mapping:
+    - first column -> Customer.customer_name
+    - PartCode -> Item.item
+    - MaterialsCode -> Partname.part_name
+    - Maker -> Partname.maker
     """
     if not file:
         return JsonResponse({"error": "File is required"}, status=400)
 
     filename = str(file.name or "").lower()
-    if not (filename.endswith(".csv") or filename.endswith(".xlsx")):
-        return JsonResponse({"error": "Only .csv and .xlsx files are supported"}, status=400)
+    if not (filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls")):
+        return JsonResponse({"error": "Only .csv, .xlsx, and .xls files are supported"}, status=400)
+
+    def clean_cell(value):
+        return "" if value is None else str(value).strip()
+
+    def find_header_row(rows):
+        """Find the row that contains PartCode + MaterialsCode + Maker."""
+        for row_index, row in enumerate(rows[:20]):
+            normalized = [_normalize_header(cell) for cell in row]
+            has_partcode = "partcode" in normalized
+            has_partname = any(h in normalized for h in [
+                "materialscode", "materialcode", "materialpartcode", "partname"
+            ])
+            has_maker = "maker" in normalized
+            if has_partcode and has_partname and has_maker:
+                return row_index, normalized
+        return None, []
+
+    def get_by_index(row, idx):
+        if idx is None or idx < 0 or idx >= len(row):
+            return ""
+        return clean_cell(row[idx])
 
     try:
         parsed_rows = []
@@ -256,8 +277,7 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
         if filename.endswith(".csv"):
             raw_text = file.read().decode("utf-8-sig", errors="ignore")
             csv_stream = io.StringIO(raw_text)
-            reader = csv.reader(csv_stream)
-            all_rows = list(reader)
+            all_rows = [[clean_cell(v) for v in row] for row in csv.reader(csv_stream)]
         else:
             try:
                 import openpyxl
@@ -268,48 +288,73 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
 
             wb = openpyxl.load_workbook(BytesIO(file.read()), data_only=True)
             ws = wb.active
-            all_rows = []
-            for row in ws.iter_rows(values_only=True):
-                all_rows.append([("" if v is None else str(v).strip()) for v in row])
+            all_rows = [[clean_cell(v) for v in row] for row in ws.iter_rows(values_only=True)]
 
+        all_rows = [row for row in all_rows if any(clean_cell(v) for v in row)]
         if not all_rows:
             return JsonResponse({"error": "The uploaded file is empty"}, status=400)
 
-        header_row = all_rows[0]
-        normalized_headers = [_normalize_header(h) for h in header_row]
+        header_idx, normalized_headers = find_header_row(all_rows)
 
-        has_named_headers = any(
-            h in {"customernames", "customername", "customer", "partcode", "materialscode", "maker"}
-            for h in normalized_headers
-        )
+        if header_idx is not None:
+            header_row = all_rows[header_idx]
+            normalized_headers = [_normalize_header(h) for h in header_row]
 
-        rows_to_process = all_rows[1:] if has_named_headers else all_rows
+            # Customer is always the first column in your Excel layout.
+            customer_col = 0
+            partcode_col = normalized_headers.index("partcode")
 
-        for idx, raw in enumerate(rows_to_process, start=2 if has_named_headers else 1):
-            if not raw:
+            # IMPORTANT: PartName/Part must come from MaterialsCode, not MaterialPartname.
+            partname_candidates = [
+                "materialscode", "materialcode", "materialpartcode", "partname"
+            ]
+            partname_col = next(
+                (normalized_headers.index(h) for h in partname_candidates if h in normalized_headers),
+                None
+            )
+            maker_col = normalized_headers.index("maker") if "maker" in normalized_headers else None
+
+            rows_to_process = all_rows[header_idx + 1:]
+            start_line = header_idx + 2
+        else:
+            # Fallback for files without usable headers.
+            # Based on your screenshot layout:
+            # A = Customer, D = PartCode, E = MaterialsCode, G = Maker
+            # zero-index: A=0, D=3, E=4, G=6
+            customer_col = 0
+            partcode_col = 3 if len(all_rows[0]) > 3 else 1
+            partname_col = 4 if len(all_rows[0]) > 4 else 2
+            maker_col = 6 if len(all_rows[0]) > 6 else (5 if len(all_rows[0]) > 5 else 3)
+            rows_to_process = all_rows
+            start_line = 1
+
+        last_customer_name = ""
+        last_item_name = ""
+
+        for offset, raw in enumerate(rows_to_process):
+            line_no = start_line + offset
+            if not raw or not any(clean_cell(v) for v in raw):
                 continue
-            if not any(str(v or "").strip() for v in raw):
-                continue
 
-            if has_named_headers:
-                row_map = {}
-                for col_idx, val in enumerate(raw):
-                    key = normalized_headers[col_idx] if col_idx < len(normalized_headers) else f"col{col_idx}"
-                    row_map[key] = "" if val is None else str(val).strip()
+            customer_name = get_by_index(raw, customer_col)
+            item_name = get_by_index(raw, partcode_col)
+            part_name = get_by_index(raw, partname_col)
+            maker = get_by_index(raw, maker_col)
 
-                customer_name = _pick_value(row_map, ["customernames", "customername", "customer"])
-                item_name = _pick_value(row_map, ["partcode"])
-                part_name = _pick_value(row_map, ["materialscode"])
-                maker = _pick_value(row_map, ["maker"])
+            # Excel uses merged/blank cells, so repeat previous Customer/PartCode downward.
+            if customer_name:
+                last_customer_name = customer_name
             else:
-                customer_name = str(raw[0]).strip() if len(raw) > 0 else ""
-                item_name = str(raw[1]).strip() if len(raw) > 1 else ""
-                part_name = str(raw[2]).strip() if len(raw) > 2 else ""
-                maker = str(raw[3]).strip() if len(raw) > 3 else ""
+                customer_name = last_customer_name
+
+            if item_name:
+                last_item_name = item_name
+            else:
+                item_name = last_item_name
 
             if not customer_name or not item_name or not part_name or not maker:
                 parsed_rows.append({
-                    "line": idx,
+                    "line": line_no,
                     "customer_name": customer_name,
                     "item": item_name,
                     "part_name": part_name,
@@ -319,7 +364,7 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
                 continue
 
             parsed_rows.append({
-                "line": idx,
+                "line": line_no,
                 "customer_name": customer_name,
                 "item": item_name,
                 "part_name": part_name,
@@ -333,46 +378,48 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
         created_customers = 0
         created_items = 0
         created_parts = 0
+        updated_parts = 0
         skipped_count = 0
         skipped_rows = []
 
-        for row in parsed_rows:
-            if row["skip_reason"]:
-                skipped_count += 1
-                skipped_rows.append(row)
-                continue
+        with transaction.atomic():
+            for row in parsed_rows:
+                if row["skip_reason"]:
+                    skipped_count += 1
+                    skipped_rows.append(row)
+                    continue
 
-            customer_obj, customer_created = Customer.objects.get_or_create(
-                customer_name=row["customer_name"]
-            )
-            if customer_created:
-                created_customers += 1
+                customer_obj, customer_created = Customer.objects.get_or_create(
+                    customer_name=row["customer_name"]
+                )
+                if customer_created:
+                    created_customers += 1
 
-            item_obj, item_created = Item.objects.get_or_create(
-                customer=customer_obj,
-                item=row["item"]
-            )
-            if item_created:
-                created_items += 1
+                item_obj, item_created = Item.objects.get_or_create(
+                    customer=customer_obj,
+                    item=row["item"]
+                )
+                if item_created:
+                    created_items += 1
 
-            part_obj, part_created = Partname.objects.get_or_create(
-                item=item_obj,
-                part_name=row["part_name"],
-                defaults={"maker": row["maker"]}
-            )
+                part_obj, part_created = Partname.objects.get_or_create(
+                    item=item_obj,
+                    part_name=row["part_name"],
+                    defaults={"maker": row["maker"]}
+                )
 
-            if not part_created and (part_obj.maker or "").strip() != row["maker"]:
-                part_obj.maker = row["maker"]
-                part_obj.save(update_fields=["maker"])
-
-            if part_created:
-                created_parts += 1
-            else:
-                skipped_count += 1
-                skipped_rows.append({
-                    **row,
-                    "skip_reason": "Part already exists for this item"
-                })
+                if part_created:
+                    created_parts += 1
+                elif (part_obj.maker or "").strip() != row["maker"]:
+                    part_obj.maker = row["maker"]
+                    part_obj.save(update_fields=["maker"])
+                    updated_parts += 1
+                else:
+                    skipped_count += 1
+                    skipped_rows.append({
+                        **row,
+                        "skip_reason": "Part already exists for this item"
+                    })
 
         return {
             "success": True,
@@ -380,6 +427,7 @@ def bulk_upload_customers(request, file: UploadedFile = File(...)):
             "created_customers": created_customers,
             "created_items": created_items,
             "created_parts": created_parts,
+            "updated_parts": updated_parts,
             "skipped_count": skipped_count,
             "skipped_rows": skipped_rows[:30]
         }
