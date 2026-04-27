@@ -343,6 +343,7 @@
     let scannedQRData = null;
     let html5QrCode = null;
     let isScanning = false;
+    let isProcessingScan = false;
 
     let masterListRows = [];
     let selectedMasterIdx = null;
@@ -521,7 +522,19 @@
 
     function parseQRData(qrText) {
         try {
-            const parsed = JSON.parse(qrText);
+            let cleanText = typeof qrText === "string" ? qrText : "";
+            if (cleanText && cleanText.charCodeAt(0) === 0xFEFF) cleanText = cleanText.slice(1);
+            cleanText = cleanText.trim();
+
+            if (/^\d+$/.test(cleanText) && cleanText.length < 15) return null;
+
+            if (!cleanText.startsWith("{")) {
+                const jsonMatch = cleanText.match(/\{.*\}/s);
+                if (!jsonMatch) return null;
+                cleanText = jsonMatch[0];
+            }
+
+            const parsed = JSON.parse(cleanText);
             const qr_uuid = parsed.qr_uuid || parsed.uuid || parsed.id;
             const item = parsed.item || parsed.item_name;
             let partName = '', partMaker = '';
@@ -547,38 +560,63 @@
         if (html5QrCode) {
             try { await html5QrCode.stop(); } catch (e) { console.warn(e); }
         }
+        const readerEl = document.getElementById("qr-reader");
+        while (readerEl.firstChild) readerEl.removeChild(readerEl.firstChild);
         html5QrCode = new Html5Qrcode("qr-reader");
-        const qrCodeSuccessCallback = (decodedText) => {
-            if (!isScanning) return;
+        isProcessingScan = false;
+
+        const qrCodeSuccessCallback = async (decodedText) => {
+            if (!isScanning || isProcessingScan) return;
+            isProcessingScan = true;
             const parsedData = parseQRData(decodedText);
             if (parsedData) {
                 scannedQRData = parsedData;
-                isScanning = false;
-                html5QrCode.stop().then(() => {
-                    scannerStatus.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> QR code scanned successfully!</span>';
-                    scannedDataContent.innerHTML = `
-                        <div class="grid grid-cols-2 gap-1 text-xs">
-                            <span class="font-semibold text-gray-600">QR UUID:</span>
-                            <span class="font-mono text-blue-700 break-all">${scannedQRData.qr_uuid}</span>
-                            <span class="font-semibold text-gray-600">Item:</span>
-                            <span>${scannedQRData.item}</span>
-                            <span class="font-semibold text-gray-600">Part Name:</span>
-                            <span>${scannedQRData.part.name}</span>
-                            <span class="font-semibold text-gray-600">Part Maker:</span>
-                            <span>${scannedQRData.part.maker || 'N/A'}</span>
-                            <span class="font-semibold text-gray-600">Lot No:</span>
-                            <span>${scannedQRData.lot_no}</span>
-                        </div>`;
-                    scannedDataPreview.classList.remove('hidden');
-                    verifyScannedBtn.disabled = false;
-                    setFooterMessage('QR scanned. Ready for verification.');
-                }).catch(err => console.error('Failed to stop scanner', err));
+                try {
+                    await html5QrCode.pause(true);
+                    isScanning = false;
+                } catch (err) {
+                    console.warn('Failed to pause scanner', err);
+                }
+                scannerStatus.innerHTML = '<span class="text-green-600"><i class="fas fa-check-circle"></i> QR code scanned successfully!</span>';
+                scannedDataContent.innerHTML = `
+                    <div class="grid grid-cols-2 gap-1 text-xs">
+                        <span class="font-semibold text-gray-600">QR UUID:</span>
+                        <span class="font-mono text-blue-700 break-all">${scannedQRData.qr_uuid}</span>
+                        <span class="font-semibold text-gray-600">Item:</span>
+                        <span>${scannedQRData.item}</span>
+                        <span class="font-semibold text-gray-600">Part Name:</span>
+                        <span>${scannedQRData.part.name}</span>
+                        <span class="font-semibold text-gray-600">Part Maker:</span>
+                        <span>${scannedQRData.part.maker || 'N/A'}</span>
+                        <span class="font-semibold text-gray-600">Lot No:</span>
+                        <span>${scannedQRData.lot_no}</span>
+                    </div>`;
+                scannedDataPreview.classList.remove('hidden');
+                verifyScannedBtn.disabled = false;
+                setFooterMessage('QR scanned. Ready for verification.');
             } else {
                 scannerStatus.innerHTML = '<span class="text-red-500"><i class="fas fa-exclamation-triangle"></i> Invalid QR format. Please scan a valid verification QR code.</span>';
                 setTimeout(() => { if (isScanning) scannerStatus.innerHTML = ''; }, 4000);
             }
+            isProcessingScan = false;
         };
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = {
+            fps: 15,
+            qrbox: { width: 350, height: 350 },
+            aspectRatio: 1.0,
+            disableFlip: false,
+            formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true,
+            defaultZoomValueIfSupported: 1.2,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+            videoConstraints: {
+                facingMode: "environment",
+                width: { ideal: 1920, max: 3840 },
+                height: { ideal: 1080, max: 2160 }
+            }
+        };
         try {
             await html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback);
             isScanning = true;
@@ -592,8 +630,10 @@
     }
 
     async function stopScanner() {
-        if (html5QrCode && isScanning) {
-            try { await html5QrCode.stop(); isScanning = false; } catch (e) { console.warn(e); }
+        if (html5QrCode) {
+            try { await html5QrCode.stop(); } catch (e) { console.warn(e); }
+            isScanning = false;
+            isProcessingScan = false;
         }
     }
 
@@ -728,6 +768,16 @@
         scannedDataPreview.classList.add('hidden');
         verifyScannedBtn.disabled = true;
         scannerStatus.innerHTML = '';
+        if (html5QrCode && !isScanning) {
+            try {
+                await html5QrCode.resume();
+                isScanning = true;
+                setFooterMessage('Camera resumed. Please scan QR code.');
+                return;
+            } catch (e) {
+                console.warn('Failed to resume scanner, restarting camera', e);
+            }
+        }
         await startScanner();
         setFooterMessage('Camera restarted. Please scan QR code.');
     }
