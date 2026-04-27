@@ -25,6 +25,19 @@ import uuid
 api = NinjaAPI()
 
 
+def _normalize_header(value):
+    return "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum())
+
+
+def _pick_value(row, keys, default=""):
+    for key in keys:
+        if key in row:
+            val = row.get(key)
+            if val is not None and str(val).strip() != "":
+                return str(val).strip()
+    return default
+
+
 @api.get("/read-csv/")
 def read_csv(request):
     # Specify the path to your CSV file
@@ -217,6 +230,162 @@ def create_customer(request, data: CustomerSchema):
         return JsonResponse({
             "error": f"Database integrity error: {str(e)}"
         }, status=400)
+
+
+@api.post("/bulk-upload/customers", tags=['Customer/Items/Partname'])
+def bulk_upload_customers(request, file: UploadedFile = File(...)):
+    """
+    Bulk upload customer/item/part data from CSV or XLSX.
+
+    Expected mapping from uploaded file:
+    - first column -> customer name
+    - PartCode -> item
+    - MaterialsCode -> part_name
+    - Maker -> maker
+    """
+    if not file:
+        return JsonResponse({"error": "File is required"}, status=400)
+
+    filename = str(file.name or "").lower()
+    if not (filename.endswith(".csv") or filename.endswith(".xlsx")):
+        return JsonResponse({"error": "Only .csv and .xlsx files are supported"}, status=400)
+
+    try:
+        parsed_rows = []
+
+        if filename.endswith(".csv"):
+            raw_text = file.read().decode("utf-8-sig", errors="ignore")
+            csv_stream = io.StringIO(raw_text)
+            reader = csv.reader(csv_stream)
+            all_rows = list(reader)
+        else:
+            try:
+                import openpyxl
+            except Exception:
+                return JsonResponse({
+                    "error": "Excel upload requires openpyxl. Install it with: pip install openpyxl"
+                }, status=500)
+
+            wb = openpyxl.load_workbook(BytesIO(file.read()), data_only=True)
+            ws = wb.active
+            all_rows = []
+            for row in ws.iter_rows(values_only=True):
+                all_rows.append([("" if v is None else str(v).strip()) for v in row])
+
+        if not all_rows:
+            return JsonResponse({"error": "The uploaded file is empty"}, status=400)
+
+        header_row = all_rows[0]
+        normalized_headers = [_normalize_header(h) for h in header_row]
+
+        has_named_headers = any(
+            h in {"customernames", "customername", "customer", "partcode", "materialscode", "maker"}
+            for h in normalized_headers
+        )
+
+        rows_to_process = all_rows[1:] if has_named_headers else all_rows
+
+        for idx, raw in enumerate(rows_to_process, start=2 if has_named_headers else 1):
+            if not raw:
+                continue
+            if not any(str(v or "").strip() for v in raw):
+                continue
+
+            if has_named_headers:
+                row_map = {}
+                for col_idx, val in enumerate(raw):
+                    key = normalized_headers[col_idx] if col_idx < len(normalized_headers) else f"col{col_idx}"
+                    row_map[key] = "" if val is None else str(val).strip()
+
+                customer_name = _pick_value(row_map, ["customernames", "customername", "customer"])
+                item_name = _pick_value(row_map, ["partcode"])
+                part_name = _pick_value(row_map, ["materialscode"])
+                maker = _pick_value(row_map, ["maker"])
+            else:
+                customer_name = str(raw[0]).strip() if len(raw) > 0 else ""
+                item_name = str(raw[1]).strip() if len(raw) > 1 else ""
+                part_name = str(raw[2]).strip() if len(raw) > 2 else ""
+                maker = str(raw[3]).strip() if len(raw) > 3 else ""
+
+            if not customer_name or not item_name or not part_name or not maker:
+                parsed_rows.append({
+                    "line": idx,
+                    "customer_name": customer_name,
+                    "item": item_name,
+                    "part_name": part_name,
+                    "maker": maker,
+                    "skip_reason": "Missing one or more required values"
+                })
+                continue
+
+            parsed_rows.append({
+                "line": idx,
+                "customer_name": customer_name,
+                "item": item_name,
+                "part_name": part_name,
+                "maker": maker,
+                "skip_reason": None
+            })
+
+        if not parsed_rows:
+            return JsonResponse({"error": "No usable rows found in the uploaded file"}, status=400)
+
+        created_customers = 0
+        created_items = 0
+        created_parts = 0
+        skipped_count = 0
+        skipped_rows = []
+
+        for row in parsed_rows:
+            if row["skip_reason"]:
+                skipped_count += 1
+                skipped_rows.append(row)
+                continue
+
+            customer_obj, customer_created = Customer.objects.get_or_create(
+                customer_name=row["customer_name"]
+            )
+            if customer_created:
+                created_customers += 1
+
+            item_obj, item_created = Item.objects.get_or_create(
+                customer=customer_obj,
+                item=row["item"]
+            )
+            if item_created:
+                created_items += 1
+
+            part_obj, part_created = Partname.objects.get_or_create(
+                item=item_obj,
+                part_name=row["part_name"],
+                defaults={"maker": row["maker"]}
+            )
+
+            if not part_created and (part_obj.maker or "").strip() != row["maker"]:
+                part_obj.maker = row["maker"]
+                part_obj.save(update_fields=["maker"])
+
+            if part_created:
+                created_parts += 1
+            else:
+                skipped_count += 1
+                skipped_rows.append({
+                    **row,
+                    "skip_reason": "Part already exists for this item"
+                })
+
+        return {
+            "success": True,
+            "rows_read": len(parsed_rows),
+            "created_customers": created_customers,
+            "created_items": created_items,
+            "created_parts": created_parts,
+            "skipped_count": skipped_count,
+            "skipped_rows": skipped_rows[:30]
+        }
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
     
 @api.patch("/customers/{customer_name}/items/add-item",tags=['Customer/Items/Partname'])
 def append_customer_item(request, customer_name: str, data: AppendItemSchema):

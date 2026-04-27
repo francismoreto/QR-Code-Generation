@@ -83,6 +83,27 @@
             <p class="text-gray-500">Register customers, add items, and define part specifications</p>
         </div>
 
+        <div class="bg-white rounded-2xl border border-blue-100 shadow-md p-4 md:p-5 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                    <h2 class="text-base md:text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fas fa-file-upload text-blue-600"></i> Bulk Upload (CSV/Excel)
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">
+                        Mapping used: <code>1st column = Customer Name</code>, <code>PartCode = Item</code>,
+                        <code>MaterialsCode = Part</code>, <code>Maker = Maker</code>.
+                        You can still use manual input below.
+                    </p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <input id="bulkCustomerFileInput" type="file" accept=".csv,.xlsx" class="file-input file-input-bordered file-input-sm w-full md:w-72">
+                    <button id="bulkCustomerUploadBtn" type="button" class="btn btn-primary btn-sm gap-2">
+                        <i class="fas fa-upload"></i> Upload File
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Progress Steps -->
         <div class="flex justify-center mb-10">
             <ul class="steps steps-horizontal w-full max-w-3xl">
@@ -250,6 +271,7 @@
     <script>
         // API Configuration
         const API_BASE_URL = "http://127.0.0.1:8000";
+        const BULK_CUSTOMERS_UPLOAD_URL = `${API_BASE_URL}/api/bulk-upload/customers`;
         
         // Data storage
         let currentCustomerName = '';
@@ -286,6 +308,8 @@
         const backToStep2Btn = document.getElementById('backToStep2Btn');
         const step3CustomerName = document.getElementById('step3CustomerName');
         const step3ItemName = document.getElementById('step3ItemName');
+        const bulkCustomerFileInput = document.getElementById('bulkCustomerFileInput');
+        const bulkCustomerUploadBtn = document.getElementById('bulkCustomerUploadBtn');
 
         // Show loading overlay
         function showLoadingOverlay(message = 'Processing...') {
@@ -332,6 +356,35 @@
                 confirmButtonText: 'OK',
                 confirmButtonColor: '#ef4444'
             });
+        }
+
+        async function uploadBulkCustomerFile() {
+            const file = bulkCustomerFileInput?.files?.[0];
+            if (!file) {
+                showErrorNotification('Validation Error', 'Please choose a CSV or Excel file first.');
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('file', file);
+            bulkCustomerUploadBtn.disabled = true;
+            const originalBtn = bulkCustomerUploadBtn.innerHTML;
+            bulkCustomerUploadBtn.innerHTML = '<span class="loading loading-spinner loading-sm"></span> Uploading...';
+
+            try {
+                const resp = await fetch(BULK_CUSTOMERS_UPLOAD_URL, { method: 'POST', body: fd });
+                const data = await resp.json();
+                if (!resp.ok || data.error) throw new Error(data.error || 'Bulk upload failed');
+
+                const summary = `Rows read: ${data.rows_read || 0}\nCreated customers: ${data.created_customers || 0}\nCreated items: ${data.created_items || 0}\nCreated parts: ${data.created_parts || 0}\nSkipped: ${data.skipped_count || 0}`;
+                showSuccessNotification('Bulk Upload Completed', summary);
+                if (bulkCustomerFileInput) bulkCustomerFileInput.value = '';
+            } catch (err) {
+                showErrorNotification('Bulk Upload Failed', err.message || 'Upload failed');
+            } finally {
+                bulkCustomerUploadBtn.disabled = false;
+                bulkCustomerUploadBtn.innerHTML = originalBtn;
+            }
         }
 
         // Step 1: Create Customer
@@ -689,6 +742,7 @@
         submitPartsBtn.addEventListener('click', submitAllParts);
         backToStep1Btn.addEventListener('click', backToStep1);
         backToStep2Btn.addEventListener('click', backToStep2);
+        bulkCustomerUploadBtn?.addEventListener('click', uploadBulkCustomerFile);
         
         partNameInput.addEventListener('input', validatePartFields);
         makerInput.addEventListener('input', validatePartFields);
