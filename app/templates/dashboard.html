@@ -356,9 +356,18 @@
                     <div class="card-body">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                             <h2 class="text-xl font-semibold">Recent QR Verifications</h2>
-                            <button id="refreshLogsBtn" class="btn btn-outline btn-sm gap-2 shrink-0">
-                                <i class="fas fa-sync-alt"></i> Refresh Logs
-                            </button>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <label class="text-xs text-base-content/60 flex items-center gap-1">
+                                    Day
+                                    <input type="date" id="exportLogsDate" class="input input-bordered input-sm h-8 min-h-8">
+                                </label>
+                                <button id="downloadLogsExcelBtn" class="btn btn-primary btn-sm gap-2 shrink-0">
+                                    <i class="fas fa-file-excel"></i> Download Day
+                                </button>
+                                <button id="refreshLogsBtn" class="btn btn-outline btn-sm gap-2 shrink-0">
+                                    <i class="fas fa-sync-alt"></i> Refresh Logs
+                                </button>
+                            </div>
                         </div>
                         <div class="rounded-xl border border-base-200 bg-base-200/40 p-3 mb-4">
                             <p class="text-xs font-semibold text-base-content/50 uppercase tracking-wide mb-2">Filters</p>
@@ -705,6 +714,7 @@ const API_BASE_URL = window.location.origin;
     const MASTER_SELECTION_URL   = `${API_BASE_URL}/api/qr/selection/customers`;
     const LIST_QR_URL            = `${API_BASE_URL}/api/qr/list`;
     const VERIFICATION_LOGS_URL  = `${API_BASE_URL}/api/verification/logs`;
+    const VERIFICATION_LOGS_EXPORT_URL = `${API_BASE_URL}/api/verification/logs/export`;
 
     let html5QrCode = null, isScanning = false, isProcessing = false;
     let scanCount = 0, verifiedCount = 0, nogoodCount = 0;
@@ -1532,6 +1542,22 @@ const API_BASE_URL = window.location.origin;
         renderVerificationLogsTable();
     }
 
+    function getTodayForInput() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, "0");
+        const d = String(now.getDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+    }
+
+    function downloadVerificationLogsForDay() {
+        const dayInput = document.getElementById("exportLogsDate");
+        const selectedDate = (dayInput?.value || "").trim() || getTodayForInput();
+        if (dayInput && !dayInput.value) dayInput.value = selectedDate;
+        const url = `${VERIFICATION_LOGS_EXPORT_URL}?date=${encodeURIComponent(selectedDate)}`;
+        window.open(url, "_blank");
+    }
+
     document.getElementById("verificationHistoryTable")?.addEventListener("click", (e) => {
         const btn = e.target.closest(".verif-log-del");
         if (!btn) return;
@@ -1934,8 +1960,13 @@ const API_BASE_URL = window.location.origin;
     document.getElementById("verificationFilterDateFrom")?.addEventListener("change", () => renderVerificationLogsTable());
     document.getElementById("verificationFilterDateTo")?.addEventListener("change", () => renderVerificationLogsTable());
     document.getElementById("verificationClearFiltersBtn")?.addEventListener("click", clearVerificationFilters);
+    document.getElementById("downloadLogsExcelBtn")?.addEventListener("click", downloadVerificationLogsForDay);
     initVerificationStatusDropdown();
     syncVerificationStatusLabel();
+    const exportLogsDateInput = document.getElementById("exportLogsDate");
+    if (exportLogsDateInput && !exportLogsDateInput.value) {
+        exportLogsDateInput.value = getTodayForInput();
+    }
 
     setTimeout(() => {
         fetchBackendLogsForRecentTable();

@@ -11,7 +11,7 @@ import io
 from ninja.files import UploadedFile
 from ninja import File
 from django.db import transaction, IntegrityError
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from typing import List, Optional
 from io import BytesIO
 from django.core.files.base import ContentFile
@@ -1271,6 +1271,63 @@ def get_verification_logs(request):
             "verified_by": log.verified_by
         })
     return {"count": len(result), "logs": result}
+
+
+@api.get("/verification/logs/export")
+def export_verification_logs(request, date: Optional[str] = None):
+    """
+    Export verification logs for a single day as an Excel-friendly CSV.
+    Query param:
+      - date=YYYY-MM-DD (optional; defaults to today in server local time)
+    """
+    try:
+        export_date = timezone.localdate()
+        if date:
+            try:
+                export_date = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                return JsonResponse({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+
+        logs_qs = VerificationLog.objects.filter(timestamp__date=export_date).order_by("-timestamp")
+
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="verification_logs_{export_date.isoformat()}.csv"'
+        writer = csv.writer(response)
+
+        writer.writerow([
+            "Timestamp",
+            "QR UUID",
+            "QR Item",
+            "Part Name",
+            "Part Maker",
+            "Lot No",
+            "User Item",
+            "User Part",
+            "Status",
+            "Result",
+            "Backend Updated",
+            "Verified By",
+        ])
+
+        for log in logs_qs:
+            writer.writerow([
+                timezone.localtime(log.timestamp).strftime("%Y-%m-%d %H:%M:%S"),
+                str(log.qr_uuid),
+                log.qr_item or "",
+                log.part_name or "",
+                log.part_maker or "",
+                log.lot_no or "",
+                log.user_item or "",
+                log.user_part or "",
+                log.status or "",
+                log.result or "",
+                "Yes" if log.backend_updated else "No",
+                log.verified_by or "",
+            ])
+
+        return response
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 @api.delete("/verification/logs/{log_id}")

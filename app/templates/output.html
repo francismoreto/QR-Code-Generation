@@ -349,6 +349,19 @@
 
     let masterListRows = [];
     let selectedMasterIdx = null;
+    let currentEmployee = null;
+
+    function loadCurrentEmployee() {
+        try {
+            const raw = sessionStorage.getItem("employee");
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === "object" ? parsed : null;
+        } catch (e) {
+            console.warn("Could not parse session employee data:", e);
+            return null;
+        }
+    }
 
     function flattenCustomersToMasterRows(customers) {
         const rows = [];
@@ -509,6 +522,10 @@
     async function saveVerificationLogForUser(apiResponse) {
         if (!scannedQRData || !currentUserInput.item_name) return;
         const resolvedStatus = apiResponse?.status === "GOOD" ? "GOOD" : "NO_GOOD";
+        const verifiedByName =
+            (currentEmployee?.username || "").trim() ||
+            (currentEmployee?.employee_id || "").trim() ||
+            "user";
         const payload = {
             qr_uuid: scannedQRData.qr_uuid,
             qr_item: scannedQRData.item || "",
@@ -520,7 +537,7 @@
             status: resolvedStatus,
             result: resolvedStatus,
             backend_updated: true,
-            verified_by: "user"
+            verified_by: verifiedByName
         };
         try {
             const resp = await fetch(VERIFICATION_LOGS_URL, {
@@ -871,6 +888,7 @@
     // forceLogoutBtn already uses confirmLogout which triggers modal, so that's covered.
     
     // Initialize
+    currentEmployee = loadCurrentEmployee();
     updateApiDisplay();
     setFooterMessage(`API: ${FULL_API_URL} | Master list + tap row to scan.`);
     loadOutputMasterList();
