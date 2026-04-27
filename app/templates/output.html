@@ -333,8 +333,10 @@
     const API_BASE_URL = window.location.origin;
     const VERIFY_ENDPOINT = "/api/verify/cross-check";
     const MASTER_SELECTION_ENDPOINT = "/api/qr/selection/customers";
+    const VERIFICATION_LOGS_ENDPOINT = "/api/verification/logs";
     const FULL_API_URL = API_BASE_URL + VERIFY_ENDPOINT;
     const MASTER_SELECTION_URL = API_BASE_URL + MASTER_SELECTION_ENDPOINT;
+    const VERIFICATION_LOGS_URL = API_BASE_URL + VERIFICATION_LOGS_ENDPOINT;
     // Login page redirect URL (can be configured as needed)
     const LOGIN_REDIRECT_URL = "/login";
 
@@ -502,6 +504,36 @@
         footerStatus.innerHTML = isError
             ? `<i class="fas fa-exclamation-triangle text-amber-500"></i> ${msg}`
             : `<i class="fas fa-circle-info text-blue-400"></i> ${msg}`;
+    }
+
+    async function saveVerificationLogForUser(apiResponse) {
+        if (!scannedQRData || !currentUserInput.item_name) return;
+        const resolvedStatus = apiResponse?.status === "GOOD" ? "GOOD" : "NO_GOOD";
+        const payload = {
+            qr_uuid: scannedQRData.qr_uuid,
+            qr_item: scannedQRData.item || "",
+            part_name: scannedQRData.part?.name || "",
+            part_maker: scannedQRData.part?.maker || "",
+            lot_no: scannedQRData.lot_no || "",
+            user_item: currentUserInput.item_name || "",
+            user_part: currentUserInput.part_name || "",
+            status: resolvedStatus,
+            result: resolvedStatus,
+            backend_updated: true,
+            verified_by: "user"
+        };
+        try {
+            const resp = await fetch(VERIFICATION_LOGS_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) {
+                console.error("Failed to save user verification log:", await resp.text());
+            }
+        } catch (e) {
+            console.error("Failed to save user verification log:", e);
+        }
     }
 
     function validateMasterSelection() {
@@ -708,6 +740,7 @@
             }
             const result = await response.json();
             await stopScanner();
+            await saveVerificationLogForUser(result);
             displayVerificationResult(result);
         } catch (error) {
             console.error("Verification API error:", error);
