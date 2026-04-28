@@ -146,7 +146,7 @@
                     </div>
                     
                     <div class="flex justify-end mt-6">
-                        <button id="createCustomerBtn" class="btn btn-primary px-8 gap-2 shadow-md">
+                        <button id="createCustomerBtn" type="button" class="btn btn-primary px-8 gap-2 shadow-md">
                             Create Customer <i class="fas fa-arrow-right"></i>
                         </button>
                     </div>
@@ -183,10 +183,10 @@
                     </div>
                     
                     <div class="flex justify-between mt-6">
-                        <button id="backToStep1Btn" class="btn btn-outline gap-2">
+                        <button id="backToStep1Btn" type="button" class="btn btn-outline gap-2">
                             <i class="fas fa-chevron-left"></i> Back
                         </button>
-                        <button id="addItemBtn" class="btn btn-primary gap-2 shadow-md">
+                        <button id="addItemBtn" type="button" class="btn btn-primary gap-2 shadow-md">
                             Add Item <i class="fas fa-arrow-right"></i>
                         </button>
                     </div>
@@ -230,7 +230,7 @@
                                     <input type="text" id="maker" placeholder="e.g., Texas Instruments, Foxconn" 
                                            class="input input-bordered w-full">
                                 </div>
-                                <button id="addPartBtn" disabled class="btn btn-primary w-full mt-2 gap-2">
+                                <button id="addPartBtn" type="button" disabled class="btn btn-primary w-full mt-2 gap-2">
                                     <i class="fas fa-plus"></i> Add Part
                                 </button>
                             </div>
@@ -242,7 +242,7 @@
                                 <h3 class="font-bold text-gray-700">
                                     <i class="fas fa-list-ul text-indigo-500 mr-1"></i> Parts List (<span id="partsCount">0</span>)
                                 </h3>
-                                <button id="clearAllParts" class="btn btn-xs btn-ghost text-red-500 hover:bg-red-50">
+                                <button id="clearAllParts" type="button" class="btn btn-xs btn-ghost text-red-500 hover:bg-red-50">
                                     <i class="fas fa-trash-alt"></i> Clear all
                                 </button>
                             </div>
@@ -256,10 +256,10 @@
                     </div>
                     
                     <div class="flex justify-between mt-6">
-                        <button id="backToStep2Btn" class="btn btn-outline gap-2">
+                        <button id="backToStep2Btn" type="button" class="btn btn-outline gap-2">
                             <i class="fas fa-chevron-left"></i> Back
                         </button>
-                        <button id="submitPartsBtn" disabled class="btn btn-success gap-2 shadow-md px-8">
+                        <button id="submitPartsBtn" type="button" disabled class="btn btn-success gap-2 shadow-md px-8">
                             <i class="fas fa-check-circle"></i> Complete Registration
                         </button>
                     </div>
@@ -301,7 +301,7 @@
         const partNameInput = document.getElementById('partName');
         const makerInput = document.getElementById('maker');
         const addPartBtn = document.getElementById('addPartBtn');
-        const partsList = document.getElementById('partsList');
+        const partsListContainer = document.getElementById('partsList');
         const partsCount = document.getElementById('partsCount');
         const clearAllParts = document.getElementById('clearAllParts');
         const submitPartsBtn = document.getElementById('submitPartsBtn');
@@ -524,72 +524,76 @@
             return isValid;
         }
 
-        function addPart() {
-            if (!validatePartFields()) return;
-            
-            const newPart = {
-                part_name: partNameInput.value.trim(),
-                maker: makerInput.value.trim()
-            };
-            
-            // Check for duplicates in current session
-            const duplicate = partsArray.some(p => 
-                p.part_name.toLowerCase() === newPart.part_name.toLowerCase() && 
-                p.maker.toLowerCase() === newPart.maker.toLowerCase()
-            );
-            
-            if (duplicate) {
-                showErrorNotification('Duplicate Part', `Part "${newPart.part_name}" with maker "${newPart.maker}" already exists in the list!`);
+        function addPart(event) {
+            if (event) event.preventDefault();
+
+            const partName = (partNameInput?.value || '').trim();
+            const makerName = (makerInput?.value || '').trim();
+
+            if (!partName || !makerName) {
+                showErrorNotification('Validation Error', 'Please enter both Part Name and Maker / Manufacturer.');
                 return;
             }
-            
+
+            const newPart = {
+                part_name: partName,
+                maker: makerName
+            };
+
+            // Check duplicate part name in the current list. Backend also checks existing DB parts.
+            const duplicate = partsArray.some(p =>
+                (p.part_name || '').trim().toLowerCase() === newPart.part_name.toLowerCase()
+            );
+
+            if (duplicate) {
+                showErrorNotification('Duplicate Part', `Part "${newPart.part_name}" is already in the parts list.`);
+                return;
+            }
+
             partsArray.push(newPart);
             renderPartsList();
             validatePartsSubmit();
-            
-            // Show success for individual part addition
-            showSuccessNotification('Part Added!', `Part "${newPart.part_name}" (${newPart.maker}) has been added.`);
-            
-            // Clear inputs
+
             partNameInput.value = '';
             makerInput.value = '';
-            partNameInput.focus();
             validatePartFields();
+            partNameInput.focus();
+
+            showSuccessNotification('Part Added!', `Part "${newPart.part_name}" (${newPart.maker}) has been added to the list.`);
         }
 
         function renderPartsList() {
+            if (!partsListContainer || !partsCount) return;
+
+            partsCount.innerText = String(partsArray.length);
+
             if (partsArray.length === 0) {
-                partsList.innerHTML = `
+                partsListContainer.innerHTML = `
                     <div class="text-center text-gray-400 py-8 text-sm">
                         <i class="fas fa-cogs text-3xl mb-2 block"></i>
                         No parts added yet
                     </div>
                 `;
-                partsCount.innerText = '0';
                 return;
             }
-            
-            partsCount.innerText = partsArray.length;
-            let html = '';
-            partsArray.forEach((part, idx) => {
-                html += `
-                    <div class="part-card bg-white rounded-lg p-3 border border-gray-200 flex justify-between items-center hover:shadow-sm transition">
-                        <div class="flex-1">
-                            <div class="font-semibold text-gray-800">${escapeHtml(part.part_name)}</div>
-                            <div class="text-xs text-gray-500 mt-1">
-                                <i class="fas fa-industry"></i> Maker: ${escapeHtml(part.maker)}
-                            </div>
+
+            partsListContainer.innerHTML = partsArray.map((part, idx) => `
+                <div class="part-card bg-white rounded-lg p-3 border border-gray-200 flex justify-between items-center hover:shadow-sm transition">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-gray-800 break-words">${escapeHtml(part.part_name)}</div>
+                        <div class="text-xs text-gray-500 mt-1 break-words">
+                            <i class="fas fa-industry"></i> Maker: ${escapeHtml(part.maker)}
                         </div>
-                        <button onclick="removePart(${idx})" class="btn btn-xs btn-circle btn-ghost text-red-500 hover:bg-red-50">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
                     </div>
-                `;
-            });
-            partsList.innerHTML = html;
+                    <button type="button" onclick="removePart(${idx})" class="btn btn-xs btn-circle btn-ghost text-red-500 hover:bg-red-50">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            `).join('');
         }
 
         window.removePart = function(index) {
+            if (index < 0 || index >= partsArray.length) return;
             const removedPart = partsArray[index];
             partsArray.splice(index, 1);
             renderPartsList();
@@ -738,14 +742,22 @@
         createCustomerBtn.addEventListener('click', createCustomer);
         addItemBtn.addEventListener('click', addItemToCustomer);
         addPartBtn.addEventListener('click', addPart);
-        clearAllParts.addEventListener('click', clearAllPartsFunc);
-        submitPartsBtn.addEventListener('click', submitAllParts);
-        backToStep1Btn.addEventListener('click', backToStep1);
-        backToStep2Btn.addEventListener('click', backToStep2);
+        clearAllParts.addEventListener('click', (e) => { e.preventDefault(); clearAllPartsFunc(); });
+        submitPartsBtn.addEventListener('click', (e) => { e.preventDefault(); submitAllParts(); });
+        backToStep1Btn.addEventListener('click', (e) => { e.preventDefault(); backToStep1(); });
+        backToStep2Btn.addEventListener('click', (e) => { e.preventDefault(); backToStep2(); });
         bulkCustomerUploadBtn?.addEventListener('click', uploadBulkCustomerFile);
         
         partNameInput.addEventListener('input', validatePartFields);
         makerInput.addEventListener('input', validatePartFields);
+        [partNameInput, makerInput].forEach(input => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addPart(e);
+                }
+            });
+        });
         
         // Initial validation
         renderPartsList();

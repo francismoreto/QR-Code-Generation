@@ -494,7 +494,7 @@
             try { result = JSON.parse(rawText); } catch(e) { result = { raw: rawText }; }
             
             if (!response.ok) {
-                if (response.status === 405) throw new Error(`Server does not accept PATCH at this endpoint. Check api.py route.`);
+                if (response.status === 405) throw new Error(`Server does not accept PATCH at this endpoint`);
                 if (response.status === 409) throw new Error(`Item "${itemName}" already exists for this customer!`);
                 throw new Error(result.error || result.message || `Server error: ${response.status}`);
             }
