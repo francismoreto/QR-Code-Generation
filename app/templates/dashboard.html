@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .sidebar-transition { transition: width 0.3s ease, transform 0.3s ease; }
         #qr-reader { width: 100%; border-radius: 1rem; overflow: hidden; position: relative; }
@@ -442,7 +443,10 @@
                         <form id="generateQrForm" class="space-y-4">
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <h2 class="text-lg font-semibold text-base-content flex items-center gap-2"><i class="fas fa-list-ul text-primary"></i> Master list of items</h2>
-                                <button type="button" id="refreshMasterListBtn" class="btn btn-outline btn-sm gap-2"><i class="fas fa-sync-alt"></i> Refresh list</button>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" id="deleteSelectedMasterBtn" class="btn btn-error btn-sm gap-2" disabled><i class="fas fa-trash"></i> Delete selected</button>
+                                    <button type="button" id="refreshMasterListBtn" class="btn btn-outline btn-sm gap-2"><i class="fas fa-sync-alt"></i> Refresh list</button>
+                                </div>
                             </div>
                             <div class="relative">
                                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40 text-sm"></i>
@@ -455,6 +459,9 @@
                                 <table class="table table-sm w-full">
                                     <thead class="sticky top-0 z-[1] bg-base-200/95 backdrop-blur">
                                         <tr>
+                                            <th class="w-10 text-center">
+                                                <input type="checkbox" id="masterSelectAllChk" class="checkbox checkbox-xs" aria-label="Select all rows">
+                                            </th>
                                             <th class="text-xs">Customer</th>
                                             <th class="text-xs">Item</th>
                                             <th class="text-xs">Part</th>
@@ -712,6 +719,7 @@ const API_BASE_URL = window.location.origin;
     const UPDATE_STATUS_URL      = `${API_BASE_URL}/api/verify/update-status`;
     const GENERATE_API_URL       = `${API_BASE_URL}/api/qr/generate`;
     const MASTER_SELECTION_URL   = `${API_BASE_URL}/api/qr/selection/customers`;
+    const MASTER_DELETE_URL      = `${API_BASE_URL}/api/qr/selection/rows/delete`;
     const LIST_QR_URL            = `${API_BASE_URL}/api/qr/list`;
     const VERIFICATION_LOGS_URL  = `${API_BASE_URL}/api/verification/logs`;
     const VERIFICATION_LOGS_EXPORT_URL = `${API_BASE_URL}/api/verification/logs/export`;
@@ -721,6 +729,7 @@ const API_BASE_URL = window.location.origin;
     let pendingUserInput = { item_name:'', part_name:'', part_maker:'', lot_no:'' };
     let allQrRecords = [];
     let masterListRows = [];
+    let selectedMasterDeleteRows = new Set();
     let selectedMasterIndex = null;
     let verifyMasterRows = [];
     let verifySelectedIdx = null;
@@ -1095,9 +1104,12 @@ const API_BASE_URL = window.location.origin;
                     if (p.part_name)
                         rows.push({
                             customer_name: c.customer_name || "",
+                            customer_id: c.customer_id,
                             item: it.item || "",
+                            item_id: it.item_id,
                             part_name: p.part_name,
                             maker: p.maker || "",
+                            part_id: p.part_id,
                         });
                 });
             });
@@ -1578,6 +1590,22 @@ const API_BASE_URL = window.location.origin;
             .filter((i) => i >= 0);
     }
 
+    function updateMasterDeleteControls() {
+        const deleteBtn = document.getElementById("deleteSelectedMasterBtn");
+        const selectAllChk = document.getElementById("masterSelectAllChk");
+        if (!deleteBtn || !selectAllChk) return;
+
+        const filteredIndices = getFilteredMasterIndices();
+        const selectedOnFiltered = filteredIndices.filter((idx) => selectedMasterDeleteRows.has(idx)).length;
+        const hasRows = filteredIndices.length > 0;
+        const allFilteredChecked = hasRows && selectedOnFiltered === filteredIndices.length;
+
+        selectAllChk.checked = allFilteredChecked;
+        selectAllChk.indeterminate = selectedOnFiltered > 0 && !allFilteredChecked;
+        deleteBtn.disabled = selectedMasterDeleteRows.size === 0;
+        deleteBtn.innerHTML = `<i class="fas fa-trash"></i> Delete selected${selectedMasterDeleteRows.size > 0 ? ` (${selectedMasterDeleteRows.size})` : ""}`;
+    }
+
     function renderMasterList() {
         const tbody = document.getElementById("masterListBody");
         const noMatch = document.getElementById("masterListNoMatch");
@@ -1589,9 +1617,13 @@ const API_BASE_URL = window.location.origin;
             document.getElementById("selectedMasterSummary")?.classList.add("hidden");
         }
         tbody.innerHTML = "";
-        if (masterListRows.length === 0) return;
+        if (masterListRows.length === 0) {
+            updateMasterDeleteControls();
+            return;
+        }
         if (indices.length === 0) {
             noMatch.classList.remove("hidden");
+            updateMasterDeleteControls();
             return;
         }
         noMatch.classList.add("hidden");
@@ -1601,8 +1633,19 @@ const API_BASE_URL = window.location.origin;
             tr.className = "master-list-row" + (selectedMasterIndex === idx ? " master-list-row-selected" : "");
             tr.tabIndex = 0;
             tr.dataset.idx = String(idx);
-            tr.innerHTML = `<td class="text-xs">${escCell(r.customer_name)}</td><td class="text-xs font-medium">${escCell(r.item)}</td><td class="text-xs">${escCell(r.part_name)}</td><td class="text-xs">${escCell(r.maker)}</td>`;
-            tr.addEventListener("click", () => selectMasterRow(idx));
+            tr.innerHTML = `
+                <td class="text-center" data-no-row-select="1">
+                    <input type="checkbox" class="checkbox checkbox-xs master-row-check" data-idx="${idx}" ${selectedMasterDeleteRows.has(idx) ? "checked" : ""} aria-label="Select row for delete">
+                </td>
+                <td class="text-xs">${escCell(r.customer_name)}</td>
+                <td class="text-xs font-medium">${escCell(r.item)}</td>
+                <td class="text-xs">${escCell(r.part_name)}</td>
+                <td class="text-xs">${escCell(r.maker)}</td>
+            `;
+            tr.addEventListener("click", (ev) => {
+                if (ev.target.closest("[data-no-row-select='1']")) return;
+                selectMasterRow(idx);
+            });
             tr.addEventListener("keydown", (ev) => {
                 if (ev.key === "Enter" || ev.key === " ") {
                     ev.preventDefault();
@@ -1611,6 +1654,7 @@ const API_BASE_URL = window.location.origin;
             });
             tbody.appendChild(tr);
         });
+        updateMasterDeleteControls();
     }
 
     function selectMasterRow(idx) {
@@ -1647,6 +1691,7 @@ const API_BASE_URL = window.location.origin;
             const customers = Array.isArray(data) ? data : [];
             masterListRows = flattenCustomersToMasterRows(customers);
             loading.classList.add("hidden");
+            selectedMasterDeleteRows = new Set();
             selectedMasterIndex = null;
             document.getElementById("selectedMasterSummary")?.classList.add("hidden");
             if (masterListRows.length === 0) {
@@ -1660,6 +1705,63 @@ const API_BASE_URL = window.location.origin;
             loading.classList.add("hidden");
             errBox.classList.remove("hidden");
             document.getElementById("masterListErrorMsg").textContent = e.message || "Could not load master list.";
+        }
+    }
+
+    async function deleteSelectedMasterRows() {
+        const selectedIndices = Array.from(selectedMasterDeleteRows);
+        if (selectedIndices.length === 0) {
+            showToast("Select at least one row to delete.", "warning");
+            return;
+        }
+        const rowsToDelete = selectedIndices
+            .map((idx) => masterListRows[idx])
+            .filter((r) => r && r.part_id);
+        if (rowsToDelete.length === 0) {
+            showToast("Selected rows are invalid. Please refresh and try again.", "error");
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: "Delete selected rows?",
+            html: `You are about to delete <strong>${rowsToDelete.length}</strong> row(s) from the master list.<br>This action cannot be undone.`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Yes, delete",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: "#dc2626",
+            reverseButtons: true,
+        });
+        if (!result.isConfirmed) return;
+
+        const deleteBtn = document.getElementById("deleteSelectedMasterBtn");
+        if (deleteBtn) deleteBtn.disabled = true;
+        try {
+            const resp = await fetch(MASTER_DELETE_URL, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", Accept: "application/json" },
+                body: JSON.stringify({ part_ids: rowsToDelete.map((r) => r.part_id) }),
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) throw new Error(data.error || data.message || `Server returned ${resp.status}`);
+
+            await Swal.fire({
+                title: "Deleted",
+                text: data.message || `${rowsToDelete.length} row(s) deleted successfully.`,
+                icon: "success",
+                timer: 1700,
+                showConfirmButton: false,
+            });
+            selectedMasterDeleteRows = new Set();
+            await loadMasterListForQr();
+        } catch (e) {
+            await Swal.fire({
+                title: "Delete failed",
+                text: e.message || "Could not delete selected rows.",
+                icon: "error",
+            });
+        } finally {
+            updateMasterDeleteControls();
         }
     }
 
@@ -1759,6 +1861,24 @@ const API_BASE_URL = window.location.origin;
 
     document.getElementById("masterListSearch")?.addEventListener("input", () => renderMasterList());
     document.getElementById("refreshMasterListBtn")?.addEventListener("click", () => loadMasterListForQr());
+    document.getElementById("deleteSelectedMasterBtn")?.addEventListener("click", () => deleteSelectedMasterRows());
+    document.getElementById("masterSelectAllChk")?.addEventListener("change", (e) => {
+        const checked = Boolean(e.target?.checked);
+        getFilteredMasterIndices().forEach((idx) => {
+            if (checked) selectedMasterDeleteRows.add(idx);
+            else selectedMasterDeleteRows.delete(idx);
+        });
+        renderMasterList();
+    });
+    document.getElementById("masterListBody")?.addEventListener("change", (e) => {
+        const chk = e.target.closest(".master-row-check");
+        if (!chk) return;
+        const idx = Number(chk.getAttribute("data-idx"));
+        if (!Number.isInteger(idx)) return;
+        if (chk.checked) selectedMasterDeleteRows.add(idx);
+        else selectedMasterDeleteRows.delete(idx);
+        updateMasterDeleteControls();
+    });
 
     document.getElementById("generateQrForm")?.addEventListener("submit", async (e) => {
         e.preventDefault();

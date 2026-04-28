@@ -1775,21 +1775,58 @@ def get_customers_for_selection(request):
             parts = []
             for part in item.partnames.all():
                 parts.append({
+                    "part_id": part.id,
                     "part_name": part.part_name,
                     "maker": part.maker
                 })
             
             items.append({
+                "item_id": item.id,
                 "item": item.item,
                 "partnames": parts
             })
         
         result.append({
+            "customer_id": customer.id,
             "customer_name": customer.customer_name,
             "items": items
         })
     
     return result
+
+
+@api.delete("/qr/selection/rows/delete", tags=['Customer/Items/Partname'])
+def delete_master_selection_rows(request):
+    """
+    Delete one or more master-list rows by Partname IDs.
+    Expects body: { "part_ids": [1, 2, 3] }
+    """
+    try:
+        payload = json.loads((request.body or b"{}").decode("utf-8"))
+    except Exception:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    part_ids = payload.get("part_ids") if isinstance(payload, dict) else None
+    if not isinstance(part_ids, list) or not part_ids:
+        return JsonResponse({"error": "part_ids must be a non-empty array"}, status=400)
+
+    clean_ids = []
+    for raw_id in part_ids:
+        try:
+            clean_ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": f"Invalid part id: {raw_id}"}, status=400)
+
+    clean_ids = list(set(clean_ids))
+    deleted_count, _ = Partname.objects.filter(id__in=clean_ids).delete()
+    if deleted_count == 0:
+        return JsonResponse({"error": "No matching master-list rows found"}, status=404)
+
+    return {
+        "success": True,
+        "deleted_count": deleted_count,
+        "message": f"Deleted {deleted_count} row(s) from master list"
+    }
 
 
 @api.get("/qr/selection/items/{customer_name}",tags=['Customer/Items/Partname'])
